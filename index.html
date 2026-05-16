@@ -11,28 +11,43 @@
             background-color: #1d1d1d;
             margin: 0;
             padding: 0;
+            min-height: 100vh;
+            overflow-x: hidden;
         }
 
         /* Contenedor principal en dos columnas */
         #container {
-            display: flex;
+            display: grid;
+            grid-template-columns: minmax(0, 1fr) minmax(280px, 320px);
+            grid-template-rows: auto auto;
+            gap: 18px;
             width: 100%;
-            height: 90vh;
-            /* toda la pantalla */
+            min-height: 100vh;
+            height: auto;
+            padding: 18px;
             box-sizing: border-box;
+            align-items: start;
+            align-content: start;
         }
 
         /* Chat e input (60%) */
         #chat-section {
-            margin-left: 5%;
-            margin-top: 2%;
-            width: 60%;
-            height: 100%;
+            margin: 0;
+            width: auto;
+            height: auto;
+            min-height: 0;
+            grid-column: 1;
+            grid-row: 1;
             display: flex;
             flex-direction: column;
             justify-content: flex-start;
-            padding: 10px;
+            padding: 0;
             box-sizing: border-box;
+            min-width: 0;
+            min-height: clamp(520px, 70vh, 980px);
+            position: sticky;
+            top: 18px;
+            align-self: start;
         }
 
         #chat {
@@ -49,6 +64,7 @@
             background: rgb(19, 26, 32);
             color: white;
             box-sizing: border-box;
+            min-height: calc(100vh - 160px);
         }
 
         #input {
@@ -62,11 +78,12 @@
         }
 
         #sidebar {
-            position: fixed;
-            right: 0;
-            top: 0;
-            width: 300px;
-            height: 100%;
+            position: static;
+            grid-column: 2;
+            grid-row: 1 / span 2;
+            width: 100%;
+            height: fit-content;
+            max-height: none;
             background: #222;
             color: #fff;
             padding: 15px;
@@ -76,11 +93,12 @@
         }
 
         #menu-panel {
-            position: fixed;
-            left: 5%;
-            bottom: 3%;
-            width: calc(60% - 2rem);
-            max-height: 38vh;
+            position: static;
+            grid-column: 1;
+            grid-row: 2;
+            width: auto;
+            max-height: none;
+            min-height: 260px;
             display: none;
             flex-direction: column;
             gap: 10px;
@@ -92,6 +110,7 @@
             box-shadow: 0 16px 40px rgba(0, 0, 0, 0.45);
             backdrop-filter: blur(8px);
             overflow: hidden;
+            margin: 0;
         }
 
         #menu-panel.visible {
@@ -118,27 +137,76 @@
 
         #menu-grid {
             display: grid;
-            grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
-            gap: 10px;
+            grid-template-columns: repeat(auto-fill, minmax(210px, 1fr));
+            gap: 12px;
             overflow-y: auto;
+            max-height: clamp(260px, 42vh, 520px);
             padding-right: 4px;
+            align-content: start;
         }
 
         .menu-item {
+            display: grid;
+            grid-template-columns: 48px minmax(0, 1fr);
+            gap: 10px;
+            align-items: start;
             border: 1px solid #516074;
             background: rgba(255, 255, 255, 0.04);
             color: #fff;
             border-radius: 12px;
-            padding: 10px 12px;
+            padding: 12px;
             text-align: left;
             cursor: pointer;
-            transition: transform 0.15s ease, border-color 0.15s ease, background 0.15s ease;
+            min-height: 110px;
+            overflow: hidden;
+            transition: transform 0.15s ease, border-color 0.15s ease, background 0.15s ease, box-shadow 0.15s ease;
         }
 
         .menu-item:hover {
             transform: translateY(-1px);
             border-color: #f5d06f;
             background: rgba(245, 208, 111, 0.1);
+            box-shadow: 0 10px 24px rgba(0, 0, 0, 0.2);
+        }
+
+        .menu-item-icon {
+            width: 48px;
+            height: 48px;
+            border-radius: 14px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 24px;
+            font-weight: 800;
+            color: white;
+            background: linear-gradient(135deg, rgba(245, 208, 111, 0.24), rgba(125, 211, 252, 0.18));
+            border: 1px solid rgba(255, 255, 255, 0.12);
+            box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08);
+            flex-shrink: 0;
+        }
+
+        .menu-item-icon[data-kind="danger"] {
+            background: linear-gradient(135deg, rgba(220, 38, 38, 0.35), rgba(127, 29, 29, 0.45));
+        }
+
+        .menu-item-icon[data-kind="success"] {
+            background: linear-gradient(135deg, rgba(34, 197, 94, 0.35), rgba(22, 101, 52, 0.45));
+        }
+
+        .menu-item-icon[data-kind="utility"] {
+            background: linear-gradient(135deg, rgba(59, 130, 246, 0.35), rgba(30, 64, 175, 0.45));
+        }
+
+        .menu-item-icon[data-kind="head"] {
+            background: linear-gradient(135deg, rgba(168, 85, 247, 0.35), rgba(88, 28, 135, 0.45));
+        }
+
+        .menu-item-icon[data-kind="block"] {
+            background: linear-gradient(135deg, rgba(107, 114, 128, 0.35), rgba(31, 41, 55, 0.45));
+        }
+
+        .menu-item-body {
+            min-width: 0;
         }
 
         .menu-item-slot {
@@ -152,6 +220,11 @@
             display: block;
             font-size: 14px;
             font-weight: 600;
+            line-height: 1.25;
+            display: -webkit-box;
+            -webkit-line-clamp: 2;
+            -webkit-box-orient: vertical;
+            overflow: hidden;
         }
 
         .menu-item-count {
@@ -161,10 +234,73 @@
             color: #7dd3fc;
         }
 
+        .menu-item-base {
+            margin-top: 4px;
+            font-size: 12px;
+            color: #cbd5e1;
+            display: -webkit-box;
+            -webkit-line-clamp: 1;
+            -webkit-box-orient: vertical;
+            overflow: hidden;
+            word-break: break-word;
+        }
+
+        .menu-item-lore {
+            margin-top: 6px;
+            font-size: 11px;
+            color: #a5b4fc;
+            white-space: pre-wrap;
+            line-height: 1.35;
+            display: -webkit-box;
+            -webkit-line-clamp: 4;
+            -webkit-box-orient: vertical;
+            overflow: hidden;
+            word-break: break-word;
+        }
+
         .menu-empty {
             color: #94a3b8;
             font-size: 13px;
             padding: 8px 0 2px;
+        }
+
+        #menu-search {
+            width: 100%;
+            border: 1px solid #516074;
+            background: rgba(255, 255, 255, 0.06);
+            color: white;
+            border-radius: 10px;
+            padding: 10px 12px;
+            outline: none;
+            box-sizing: border-box;
+        }
+
+        #menu-search::placeholder {
+            color: #94a3b8;
+        }
+
+        #menu-results {
+            font-size: 12px;
+            color: #cbd5e1;
+        }
+
+        #menu-busy {
+            display: none;
+            font-size: 12px;
+            color: #fcd34d;
+            padding: 8px 10px;
+            border-radius: 10px;
+            background: rgba(252, 211, 77, 0.08);
+            border: 1px solid rgba(252, 211, 77, 0.2);
+        }
+
+        #menu-panel.busy #menu-busy {
+            display: block;
+        }
+
+        #menu-panel.busy .menu-item {
+            opacity: 0.6;
+            pointer-events: none;
         }
 
         #sidebar h2 {
@@ -190,6 +326,65 @@
         .highlight {
             color: #ffd700;
             font-weight: bold;
+        }
+
+        @media (max-width: 1100px) {
+            #container {
+                grid-template-columns: 1fr;
+                grid-template-rows: auto auto auto;
+                padding: 12px;
+                gap: 12px;
+            }
+
+            #chat-section {
+                grid-column: 1;
+                grid-row: 1;
+                min-height: clamp(420px, 62vh, 760px);
+                position: static;
+                top: auto;
+            }
+
+            #sidebar {
+                grid-column: 1;
+                grid-row: 2;
+                max-height: none;
+            }
+
+            #menu-panel {
+                grid-column: 1;
+                grid-row: 3;
+            }
+        }
+
+        @media (max-width: 700px) {
+            #chat {
+                min-height: 360px;
+                font-size: medium;
+            }
+
+            #menu-grid {
+                grid-template-columns: 1fr;
+                max-height: 360px;
+            }
+
+            .menu-item {
+                min-height: 96px;
+            }
+        }
+
+        @media (max-height: 780px) {
+            #container {
+                padding: 12px;
+                gap: 12px;
+            }
+
+            #chat-section {
+                min-height: clamp(420px, 62vh, 720px);
+            }
+
+            #menu-grid {
+                max-height: 320px;
+            }
         }
     </style>
 </head>
@@ -231,6 +426,9 @@
                     <div id="menu-meta">Cuando el servidor abra un inventario, aparecerá aquí.</div>
                 </div>
             </div>
+            <div id="menu-busy">Cambiando de servidor...</div>
+            <input id="menu-search" type="text" placeholder="Buscar por nombre o lore">
+            <div id="menu-results"></div>
             <div id="menu-grid"></div>
             <div id="menu-empty" class="menu-empty">Aún no hay opciones disponibles.</div>
         </div>
@@ -243,11 +441,65 @@
         const menuPanel = document.getElementById("menu-panel");
         const menuTitle = document.getElementById("menu-title");
         const menuMeta = document.getElementById("menu-meta");
+        const menuSearch = document.getElementById("menu-search");
+        const menuResults = document.getElementById("menu-results");
         const menuGrid = document.getElementById("menu-grid");
         const menuEmpty = document.getElementById("menu-empty");
+        const menuBusy = document.getElementById("menu-busy");
+        const chatHistoryLimit = 300;
+        const chatHistoryPrefix = "mcbeta-chat-history:";
         let activeMenu = null;
+        let menuQuery = "";
+        let menuBusyState = false;
+        let currentSessionId = null;
+        let chatHistory = [];
 
-        function appendLine(text, kind = "normal") {
+        function getChatStorageKey(sessionId) {
+            return `${chatHistoryPrefix}${sessionId || "unknown"}`;
+        }
+
+        function safeReadHistory(sessionId) {
+            try {
+                const raw = sessionStorage.getItem(getChatStorageKey(sessionId));
+                if (!raw) {
+                    return [];
+                }
+
+                const parsed = JSON.parse(raw);
+                return Array.isArray(parsed) ? parsed : [];
+            } catch {
+                return [];
+            }
+        }
+
+        function safeWriteHistory(sessionId, history) {
+            try {
+                sessionStorage.setItem(getChatStorageKey(sessionId), JSON.stringify(history.slice(-chatHistoryLimit)));
+            } catch {
+                // Ignore storage failures.
+            }
+        }
+
+        function resetChatHistory(sessionId) {
+            const previousSessionId = currentSessionId;
+            if (previousSessionId && previousSessionId !== sessionId) {
+                try {
+                    sessionStorage.removeItem(getChatStorageKey(previousSessionId));
+                } catch {
+                    // Ignore storage failures.
+                }
+            }
+
+            currentSessionId = sessionId || null;
+            chatHistory = safeReadHistory(currentSessionId);
+            chat.innerHTML = "";
+            chatHistory.forEach(entry => {
+                renderLine(entry.text, entry.kind, false);
+            });
+            chat.scrollTop = chat.scrollHeight;
+        }
+
+        function renderLine(text, kind = "normal", persist = true) {
             const wasAtBottom = chat.scrollTop + chat.clientHeight >= chat.scrollHeight - 50;
             const line = document.createElement("div");
             line.textContent = text;
@@ -262,56 +514,162 @@
 
             chat.appendChild(line);
 
+            if (persist && currentSessionId) {
+                chatHistory.push({ text, kind });
+                if (chatHistory.length > chatHistoryLimit) {
+                    chatHistory = chatHistory.slice(-chatHistoryLimit);
+                }
+                safeWriteHistory(currentSessionId, chatHistory);
+            }
+
             if (wasAtBottom) {
                 chat.scrollTop = chat.scrollHeight;
             }
         }
 
+        function appendLine(text, kind = "normal") {
+            renderLine(text, kind, true);
+        }
+
         function clearMenu() {
             activeMenu = null;
+            menuBusyState = false;
             menuPanel.classList.remove("visible");
+            menuPanel.classList.remove("busy");
             menuTitle.textContent = "Sin menú activo";
             menuMeta.textContent = "Cuando el servidor abra un inventario, aparecerá aquí.";
+            menuResults.textContent = "";
             menuGrid.innerHTML = "";
             menuEmpty.textContent = "Aún no hay opciones disponibles.";
+            menuBusy.textContent = "Cambiando de servidor...";
+            menuSearch.value = "";
+            menuQuery = "";
         }
 
         function renderMenu(menu) {
             activeMenu = menu;
             menuPanel.classList.add("visible");
+            menuPanel.classList.toggle("busy", menuBusyState);
             menuTitle.textContent = menu.title || "Menú del servidor";
             menuMeta.textContent = `Slots visibles: ${menu.slots.length}/${menu.slotCount || menu.slots.length} | Token: ${menu.token}`;
             menuGrid.innerHTML = "";
+            applyMenuFilter();
+        }
 
-            if (!menu.slots || menu.slots.length === 0) {
-                menuEmpty.textContent = "No hay items interactivos en este menú.";
+        function formatLore(lore) {
+            if (!Array.isArray(lore) || lore.length === 0) {
+                return "";
+            }
+
+            return lore.map(line => line.trim()).filter(Boolean).join("\n");
+        }
+
+        function getItemIcon(item) {
+            const haystack = `${item.customName || ""} ${item.displayName || ""} ${item.name || ""}`.toLowerCase();
+            const rules = [
+                { match: ["player_head", "head"], icon: "👤", kind: "head" },
+                { match: ["diamond_sword", "iron_sword", "netherite_sword", "stone_sword", "wooden_sword", "golden_sword"], icon: "⚔", kind: "utility" },
+                { match: ["bow", "crossbow"], icon: "🏹", kind: "utility" },
+                { match: ["clock"], icon: "⏰", kind: "utility" },
+                { match: ["ender_chest"], icon: "📦", kind: "utility" },
+                { match: ["barrier"], icon: "⛔", kind: "danger" },
+                { match: ["lime_dye", "emerald"], icon: "✅", kind: "success" },
+                { match: ["orange_bed", "red_bed", "blue_bed"], icon: "🛏", kind: "success" },
+                { match: ["glass_pane"], icon: "▣", kind: "block" },
+                { match: ["bed"], icon: "🛏", kind: "success" },
+                { match: ["chest", "shulker_box"], icon: "🧰", kind: "utility" },
+                { match: ["dye"], icon: "●", kind: "block" },
+                { match: ["book"], icon: "📘", kind: "utility" },
+                { match: ["compass"], icon: "🧭", kind: "utility" },
+            ];
+
+            for (const rule of rules) {
+                if (rule.match.some(token => haystack.includes(token))) {
+                    return rule;
+                }
+            }
+
+            const firstChar = (item.customName || item.displayName || item.name || "?").trim().charAt(0).toUpperCase();
+            return { icon: firstChar || "?", kind: "block" };
+        }
+
+        function applyMenuFilter() {
+            if (!activeMenu) {
                 return;
             }
 
-            menuEmpty.textContent = "Selecciona una opción para que el bot haga clic en el slot correspondiente.";
+            const query = menuQuery.trim().toLowerCase();
+            const items = Array.isArray(activeMenu.slots) ? activeMenu.slots : [];
+            const visibleItems = query
+                ? items.filter(item => (item.searchText || "").includes(query))
+                : items;
 
-            menu.slots.forEach((item) => {
+            menuGrid.innerHTML = "";
+
+            if (items.length === 0) {
+                menuEmpty.textContent = "No hay items interactivos en este menú.";
+                menuResults.textContent = "";
+                return;
+            }
+
+            if (visibleItems.length === 0) {
+                menuEmpty.textContent = "No hay resultados para esta búsqueda.";
+                menuResults.textContent = `0 coincidencias de ${items.length} items`;
+                return;
+            }
+
+            menuEmpty.textContent = "Haz click en un item para que el bot haga click en ese slot.";
+            menuResults.textContent = `${visibleItems.length} de ${items.length} items visibles`;
+
+            visibleItems.forEach((item) => {
                 const button = document.createElement("button");
                 button.type = "button";
                 button.className = "menu-item";
                 button.innerHTML = `
-                    <span class="menu-item-slot">Slot ${item.slot}</span>
-                    <span class="menu-item-name"></span>
-                    <span class="menu-item-count"></span>
+                    <div class="menu-item-icon" aria-hidden="true"></div>
+                    <div class="menu-item-body">
+                        <span class="menu-item-slot">Slot ${item.slot}</span>
+                        <span class="menu-item-name"></span>
+                        <span class="menu-item-count"></span>
+                        <div class="menu-item-base"></div>
+                        <div class="menu-item-lore"></div>
+                    </div>
                 `;
-                button.querySelector(".menu-item-name").textContent = item.displayName || item.name || "Elemento";
+                const itemIcon = getItemIcon(item);
+                const iconBox = button.querySelector(".menu-item-icon");
+                iconBox.textContent = itemIcon.icon;
+                iconBox.dataset.kind = itemIcon.kind || "block";
+                button.querySelector(".menu-item-name").textContent = item.customName || item.displayName || item.name || "Elemento";
                 button.querySelector(".menu-item-count").textContent = item.count && item.count > 1 ? `x${item.count}` : "";
+                button.querySelector(".menu-item-base").textContent = item.customName && item.name && item.customName !== item.name ? `Base: ${item.name}` : "";
+
+                const loreBox = button.querySelector(".menu-item-lore");
+                const loreText = formatLore(item.lore);
+                if (loreText) {
+                    loreBox.textContent = loreText;
+                    loreBox.style.whiteSpace = "pre-wrap";
+                } else {
+                    loreBox.textContent = "";
+                }
+
                 button.addEventListener("click", () => {
-                    if (!activeMenu || activeMenu.token !== menu.token) {
+                    const currentMenu = activeMenu;
+                    if (!currentMenu) {
                         return;
                     }
+                    const menuToken = currentMenu.token;
 
+                    menuBusyState = true;
+                    menuPanel.classList.add("busy");
+                    menuBusy.textContent = "Cambiando de servidor...";
+                    button.disabled = true;
                     ws.send(JSON.stringify({
                         type: "menuAction",
-                        token: menu.token,
+                        token: menuToken,
                         slot: item.slot,
+                        clickType: "left",
                     }));
-                    appendLine(`[MENU] Slot ${item.slot}: ${item.displayName || item.name || "Elemento"}`, "system");
+                    appendLine(`[MENU] Click izquierdo en slot ${item.slot}: ${item.displayName || item.name || "Elemento"}`, "system");
                 });
                 menuGrid.appendChild(button);
             });
@@ -334,6 +692,12 @@
 
             // Actualizar la barra lateral si el mensaje es de tipo 'sidebar'
             if (data.type == "sidebar") {
+                if (data.sessionId && data.sessionId !== currentSessionId) {
+                    resetChatHistory(data.sessionId);
+                } else if (data.sessionId && currentSessionId === null) {
+                    resetChatHistory(data.sessionId);
+                }
+
                 document.getElementById('ping').textContent = 'Obteniendo...';
                 document.getElementById('version').textContent = data.version;
                 document.getElementById('username').textContent = data.username;
@@ -354,8 +718,18 @@
             else if (data.type == "menuClose") {
                 clearMenu();
             }
+            else if (data.type == "menuBusy") {
+                menuBusyState = Boolean(data.busy);
+                menuPanel.classList.toggle("busy", menuBusyState);
+                menuBusy.textContent = data.message || "Cambiando de servidor...";
+            }
 
         };
+
+        menuSearch.addEventListener("input", () => {
+            menuQuery = menuSearch.value || "";
+            applyMenuFilter();
+        });
 
 
 
