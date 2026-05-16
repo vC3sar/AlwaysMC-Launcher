@@ -1,0 +1,209 @@
+<!DOCTYPE html>
+<html lang="es">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Chat del Bot</title>
+    <style>
+        body {
+            font-family: sans-serif;
+            background-color: #1d1d1d;
+            margin: 0;
+            padding: 0;
+        }
+
+        /* Contenedor principal en dos columnas */
+        #container {
+            display: flex;
+            width: 100%;
+            height: 90vh;
+            /* toda la pantalla */
+            box-sizing: border-box;
+        }
+
+        /* Chat e input (60%) */
+        #chat-section {
+            margin-left: 5%;
+            margin-top: 2%;
+            width: 60%;
+            height: 100%;
+            display: flex;
+            flex-direction: column;
+            justify-content: flex-start;
+            padding: 10px;
+            box-sizing: border-box;
+        }
+
+        #chat {
+            font-family: monospace;
+            white-space: pre-wrap;
+            max-width: 100%;
+            flex: 1;
+            /* ocupa todo el espacio vertical */
+            border: 1px solid #393939;
+            overflow-y: auto;
+            padding: 10px;
+            border-radius: 5px;
+            font-size: large;
+            background: rgb(19, 26, 32);
+            color: white;
+            box-sizing: border-box;
+        }
+
+        #input {
+            margin-top: 10px;
+            padding: 10px;
+            background-color: #5c5c5c;
+            color: white;
+            border-radius: 5px;
+            border: none;
+            box-sizing: border-box;
+        }
+
+        #sidebar {
+            position: fixed;
+            right: 0;
+            top: 0;
+            width: 300px;
+            height: 100%;
+            background: #222;
+            color: #fff;
+            padding: 15px;
+            border-left: 2px solid #393939;
+            overflow-y: auto;
+            box-shadow: -2px 0 8px rgba(0, 0, 0, 0.4);
+        }
+
+        #sidebar h2 {
+            margin-top: 0;
+            color: #ffd700;
+            text-align: center;
+        }
+
+        .card {
+            background: #2e2e2e;
+            padding: 10px;
+            margin: 10px 0;
+            border-radius: 8px;
+            box-shadow: 0 0 4px rgba(0, 0, 0, 0.3);
+        }
+
+        .card h3 {
+            margin: 0 0 5px 0;
+            font-size: 16px;
+            color: #4cafef;
+        }
+
+        .highlight {
+            color: #ffd700;
+            font-weight: bold;
+        }
+    </style>
+</head>
+
+<body>
+    <div id="container">
+        <!-- Columna izquierda: Chat -->
+        <div id="chat-section">
+            <div id="chat"></div>
+            <input type="text" id="input" placeholder="Escribe y presiona Enter">
+        </div>
+
+        <!-- Columna derecha: Info -->
+        <div id="sidebar">
+            <h2>📋 Información</h2>
+            <div class="card">
+                <h3>📅 Fecha: <span class="highlight" id="time">28/08/2025</span></h3>
+            </div>
+
+            <div class="card">
+                <h3>👤 Jugador</h3>
+                <p><b>Nombre: <span class="highlight" id="username">ManoloZP</span></b> </p>
+                <p><b>Versión:</b> <span id="version">1.20.4</span></p>
+            </div>
+            <div class="card">
+                <h3>🌐 Conexión</h3>
+                <p><b>Ping:</b> <span id="ping">0 ms</span></p>
+            </div>
+            <div class="card">
+                <h3>🖥 Servidor</h3>
+                <p id="server">mc.haliacraft.com</p>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const ws = new WebSocket("ws://" + location.host);
+        const chat = document.getElementById("chat");
+        const input = document.getElementById("input");
+        ws.onmessage = e => {
+
+            // Insertamos el HTML directamente en el chat
+            let data;
+            try {
+                data = JSON.parse(e.data);
+            } catch {
+                // Solo hacer scroll si ya estamos abajo antes de agregar el nuevo mensaje
+                const wasAtBottom = chat.scrollTop + chat.clientHeight >= chat.scrollHeight - 50;
+
+                // Si no es JSON, mostrar como antes
+                chat.innerHTML += e.data + "<br>";
+
+                if (wasAtBottom) {
+                    chat.scrollTop = chat.scrollHeight;
+                }
+                return;
+            }
+
+            if (typeof data.type === "undefined") {
+                // Solo hacer scroll si ya estamos abajo antes de agregar el nuevo mensaje
+                const wasAtBottom = chat.scrollTop + chat.clientHeight >= chat.scrollHeight - 50;
+
+                // Si no es JSON, mostrar como antes
+                chat.innerHTML += e.data + "<br>";
+
+                if (wasAtBottom) {
+                    chat.scrollTop = chat.scrollHeight;
+                }
+                return;
+            }
+
+
+            // Actualizar la barra lateral si el mensaje es de tipo 'sidebar'
+            if (data.type == "sidebar") {
+
+                console.log(data.ping)
+                console.log('Actualizando sidebar con:', data);
+                // Actualizar los campos correspondientes
+                document.getElementById('ping').textContent = 'Obteniendo...';
+                document.getElementById('version').textContent = data.version;
+                document.getElementById('username').textContent = data.username;
+                document.getElementById('time').textContent = data.time;
+                document.getElementById('server').textContent = data.server;
+
+            }
+            else if (data.type == "updatePing") {
+                console.log(data.ping)
+                console.log('Actualizando sidebar con:', data);
+                // Actualizar los campos correspondientes
+                document.getElementById('ping').textContent = data.ping + ' ms';
+            }
+
+        };
+
+
+
+
+        input.addEventListener("keypress", e => {
+            if (e.key === "Enter") {
+                ws.send(input.value);
+                chat.innerHTML += `<span style="color:white;font-size:small;">[JUGADOR]: ${input.value}</span><br>`;
+                input.value = "";
+            }
+        });
+    </script>
+
+</body>
+
+</html>
