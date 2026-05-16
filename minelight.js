@@ -308,14 +308,10 @@ module.exports = function (profile) {
       return;
     }
 
-    if (menuTransitionLocked) {
-      return;
-    }
-
     markOutboundEcho(line);
-    console.log(`[LOCAL:${origin}] ${line}`);
-    pushChatHistory({ text: line, source: "local" });
-    broadcast({ type: "chat", text: line, source: "local" });
+    console.log(`[CHAT:${origin}] ${line}`);
+    pushChatHistory({ text: line, source: "player" });
+    broadcast({ type: "chat", text: line, source: "player" });
 
     try {
       bot.chat(line);
