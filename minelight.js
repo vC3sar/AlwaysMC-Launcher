@@ -520,8 +520,6 @@ module.exports = function (profile) {
       })
     );
 
-    broadcastChatHistory(ws);
-
     if (activeMenu) {
       ws.send(JSON.stringify({ type: "menu", menu: activeMenu }));
     }
