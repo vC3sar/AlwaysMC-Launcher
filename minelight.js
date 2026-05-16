@@ -638,11 +638,7 @@ module.exports = function (profile) {
     setPresence(`${ip} - ${version}`);
     bot.settings.chat = "enabled";
     console.log(`✅ Conectado como ${bot.username}`);
-    broadcast({
-      type: "chat",
-      text: `✅ Conectado como ${bot.username}`,
-      source: "system",
-    });
+    emitChatLine(`✅ Conectado como ${bot.username}`, "system");
     setTimeout(() => {
       //bot.chat("/modalidades");
     }, 5000);
