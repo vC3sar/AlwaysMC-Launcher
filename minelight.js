@@ -516,6 +516,7 @@ module.exports = function (profile) {
         time: new Date().toLocaleDateString(),
         server: ip,
         sessionId,
+        chatHistory,
       })
     );
 
