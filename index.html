@@ -75,6 +75,98 @@
             box-shadow: -2px 0 8px rgba(0, 0, 0, 0.4);
         }
 
+        #menu-panel {
+            position: fixed;
+            left: 5%;
+            bottom: 3%;
+            width: calc(60% - 2rem);
+            max-height: 38vh;
+            display: none;
+            flex-direction: column;
+            gap: 10px;
+            background: linear-gradient(180deg, rgba(25, 31, 42, 0.98), rgba(16, 20, 28, 0.98));
+            color: #fff;
+            border: 1px solid #3c4758;
+            border-radius: 14px;
+            padding: 14px;
+            box-shadow: 0 16px 40px rgba(0, 0, 0, 0.45);
+            backdrop-filter: blur(8px);
+            overflow: hidden;
+        }
+
+        #menu-panel.visible {
+            display: flex;
+        }
+
+        #menu-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 12px;
+        }
+
+        #menu-title {
+            font-size: 18px;
+            font-weight: 700;
+            color: #f5d06f;
+        }
+
+        #menu-meta {
+            font-size: 12px;
+            color: #cbd5e1;
+        }
+
+        #menu-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+            gap: 10px;
+            overflow-y: auto;
+            padding-right: 4px;
+        }
+
+        .menu-item {
+            border: 1px solid #516074;
+            background: rgba(255, 255, 255, 0.04);
+            color: #fff;
+            border-radius: 12px;
+            padding: 10px 12px;
+            text-align: left;
+            cursor: pointer;
+            transition: transform 0.15s ease, border-color 0.15s ease, background 0.15s ease;
+        }
+
+        .menu-item:hover {
+            transform: translateY(-1px);
+            border-color: #f5d06f;
+            background: rgba(245, 208, 111, 0.1);
+        }
+
+        .menu-item-slot {
+            display: block;
+            font-size: 11px;
+            color: #94a3b8;
+            margin-bottom: 4px;
+        }
+
+        .menu-item-name {
+            display: block;
+            font-size: 14px;
+            font-weight: 600;
+        }
+
+        .menu-item-count {
+            display: block;
+            margin-top: 3px;
+            font-size: 12px;
+            color: #7dd3fc;
+        }
+
+        .menu-empty {
+            color: #94a3b8;
+            font-size: 13px;
+            padding: 8px 0 2px;
+        }
+
         #sidebar h2 {
             margin-top: 0;
             color: #ffd700;
@@ -131,12 +223,29 @@
                 <p id="server">mc.haliacraft.com</p>
             </div>
         </div>
+
+        <div id="menu-panel" aria-live="polite">
+            <div id="menu-header">
+                <div>
+                    <div id="menu-title">Sin menú activo</div>
+                    <div id="menu-meta">Cuando el servidor abra un inventario, aparecerá aquí.</div>
+                </div>
+            </div>
+            <div id="menu-grid"></div>
+            <div id="menu-empty" class="menu-empty">Aún no hay opciones disponibles.</div>
+        </div>
     </div>
 
     <script>
         const ws = new WebSocket("ws://" + location.host);
         const chat = document.getElementById("chat");
         const input = document.getElementById("input");
+        const menuPanel = document.getElementById("menu-panel");
+        const menuTitle = document.getElementById("menu-title");
+        const menuMeta = document.getElementById("menu-meta");
+        const menuGrid = document.getElementById("menu-grid");
+        const menuEmpty = document.getElementById("menu-empty");
+        let activeMenu = null;
 
         function appendLine(text, kind = "normal") {
             const wasAtBottom = chat.scrollTop + chat.clientHeight >= chat.scrollHeight - 50;
@@ -156,6 +265,56 @@
             if (wasAtBottom) {
                 chat.scrollTop = chat.scrollHeight;
             }
+        }
+
+        function clearMenu() {
+            activeMenu = null;
+            menuPanel.classList.remove("visible");
+            menuTitle.textContent = "Sin menú activo";
+            menuMeta.textContent = "Cuando el servidor abra un inventario, aparecerá aquí.";
+            menuGrid.innerHTML = "";
+            menuEmpty.textContent = "Aún no hay opciones disponibles.";
+        }
+
+        function renderMenu(menu) {
+            activeMenu = menu;
+            menuPanel.classList.add("visible");
+            menuTitle.textContent = menu.title || "Menú del servidor";
+            menuMeta.textContent = `Slots visibles: ${menu.slots.length}/${menu.slotCount || menu.slots.length} | Token: ${menu.token}`;
+            menuGrid.innerHTML = "";
+
+            if (!menu.slots || menu.slots.length === 0) {
+                menuEmpty.textContent = "No hay items interactivos en este menú.";
+                return;
+            }
+
+            menuEmpty.textContent = "Selecciona una opción para que el bot haga clic en el slot correspondiente.";
+
+            menu.slots.forEach((item) => {
+                const button = document.createElement("button");
+                button.type = "button";
+                button.className = "menu-item";
+                button.innerHTML = `
+                    <span class="menu-item-slot">Slot ${item.slot}</span>
+                    <span class="menu-item-name"></span>
+                    <span class="menu-item-count"></span>
+                `;
+                button.querySelector(".menu-item-name").textContent = item.displayName || item.name || "Elemento";
+                button.querySelector(".menu-item-count").textContent = item.count && item.count > 1 ? `x${item.count}` : "";
+                button.addEventListener("click", () => {
+                    if (!activeMenu || activeMenu.token !== menu.token) {
+                        return;
+                    }
+
+                    ws.send(JSON.stringify({
+                        type: "menuAction",
+                        token: menu.token,
+                        slot: item.slot,
+                    }));
+                    appendLine(`[MENU] Slot ${item.slot}: ${item.displayName || item.name || "Elemento"}`, "system");
+                });
+                menuGrid.appendChild(button);
+            });
         }
 
         ws.onmessage = e => {
@@ -188,6 +347,12 @@
             else if (data.type == "chat") {
                 const prefix = data.source === "player" ? "[CHAT]" : data.source === "system" ? "[SYSTEM]" : "[SERVER]";
                 appendLine(`${prefix} ${data.text}`, data.source);
+            }
+            else if (data.type == "menu") {
+                renderMenu(data.menu);
+            }
+            else if (data.type == "menuClose") {
+                clearMenu();
             }
 
         };

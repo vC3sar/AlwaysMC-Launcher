@@ -26,6 +26,8 @@ module.exports = function (profile) {
 
   const webClients = new Set();
   const recentChatLines = new Map();
+  let activeMenu = null;
+  let activeMenuToken = 0;
   const DEDUPE_WINDOW_MS = 750;
 
   function isIgnored(message) {
@@ -78,6 +80,58 @@ module.exports = function (profile) {
     broadcast({ type: "chat", text: line, source });
   }
 
+  function serializeItem(item, slot) {
+    if (!item) {
+      return null;
+    }
+
+    const displayName = String(item.displayName || item.name || "Elemento").trim();
+    return {
+      slot,
+      name: item.name || "unknown",
+      displayName,
+      count: item.count || 1,
+    };
+  }
+
+  function serializeMenu(window) {
+    if (!window) {
+      return null;
+    }
+
+    const slots = Array.isArray(window.slots)
+      ? window.slots
+          .map((item, slot) => serializeItem(item, slot))
+          .filter(Boolean)
+      : [];
+
+    return {
+      token: ++activeMenuToken,
+      title: String(window.title || "Menú").trim(),
+      slotCount: Array.isArray(window.slots) ? window.slots.length : 0,
+      slots,
+    };
+  }
+
+  function broadcastMenu(window) {
+    activeMenu = serializeMenu(window);
+    if (!activeMenu) {
+      return;
+    }
+
+    console.log(`📋 Menú detectado: ${activeMenu.title}`);
+    broadcast({ type: "menu", menu: activeMenu });
+  }
+
+  function closeMenu() {
+    if (!activeMenu) {
+      return;
+    }
+
+    activeMenu = null;
+    broadcast({ type: "menuClose" });
+  }
+
   // MANAGE COMMANDS FROM TERMINAL
   const rl = readline.createInterface({
     input: process.stdin,
@@ -122,6 +176,10 @@ module.exports = function (profile) {
       })
     );
 
+    if (activeMenu) {
+      ws.send(JSON.stringify({ type: "menu", menu: activeMenu }));
+    }
+
     // Actualizar ping cada 2 segundos
     const interval = setInterval(async () => {
       if (ws.readyState === WebSocket.OPEN) {
@@ -136,23 +194,42 @@ module.exports = function (profile) {
 
     // Recibir mensajes del cliente web y enviarlos al chat del bot
     ws.on("message", (msg) => {
-      const text = msg.toString().trim();
-      if (text.length > 0) {
-        bot.chat(text);
+      const raw = msg.toString().trim();
+      if (!raw) {
+        return;
+      }
+
+      try {
+        const data = JSON.parse(raw);
+        if (data && data.type === "menuAction") {
+          if (!activeMenu || data.token !== activeMenu.token) {
+            return;
+          }
+
+          const slot = Number(data.slot);
+          if (!Number.isInteger(slot) || slot < 0) {
+            return;
+          }
+
+          if (!bot.currentWindow) {
+            return;
+          }
+
+          bot.clickWindow(slot, 0, 0);
+          return;
+        }
+      } catch {
+        // Plain text falls through to chat.
+      }
+
+      if (raw.length > 0) {
+        bot.chat(raw);
       }
     });
-
-    // Enviar mensajes del servidor al cliente web
-    const serverListener = (message, position) => {
-      if (position === "chat") return;
-      emitChatLine(message, "server");
-    };
-    bot.on("messagestr", serverListener);
 
     // Limpiar listeners al cerrar conexión
     ws.on("close", () => {
       webClients.delete(ws);
-      bot.removeListener("messagestr", serverListener);
       clearInterval(interval);
       console.log("❌ Cliente web desconectado");
     });
@@ -164,19 +241,14 @@ module.exports = function (profile) {
   }, 24000);
 
   // JOIN A SERVER MODE
-  function clickItem(slot) {
-    const window = bot.currentWindow;
-    if (!window) return console.log("❌ No hay inventario abierto");
-    bot.clickWindow(slot, 0, 0);
-  }
-
   bot.on("windowOpen", (window) => {
     console.log("📂 Menú abierto:", window.title);
+    broadcastMenu(window);
+  });
 
-    setTimeout(() => {
-      clickItem(20); // ajusta al slot que necesites
-      console.log("➡️ Clic en el servidor vanilla");
-    }, 1000);
+  bot.on("windowClose", () => {
+    console.log("📂 Menú cerrado");
+    closeMenu();
   });
 
   // MAIN EVENTS
@@ -199,6 +271,11 @@ module.exports = function (profile) {
   bot.on("chat", (username, message) => {
     if (username === bot.username) return;
     emitChatLine(`${username}: ${message}`, "player");
+  });
+
+  bot.on("messagestr", (message, position) => {
+    if (position === "chat") return;
+    emitChatLine(message, "server");
   });
 
   // OPTIONS
