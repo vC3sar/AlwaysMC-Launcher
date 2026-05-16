@@ -446,55 +446,19 @@
         const menuGrid = document.getElementById("menu-grid");
         const menuEmpty = document.getElementById("menu-empty");
         const menuBusy = document.getElementById("menu-busy");
-        const chatHistoryLimit = 300;
-        const chatHistoryPrefix = "mcbeta-chat-history:";
         let activeMenu = null;
         let menuQuery = "";
         let menuBusyState = false;
         let currentSessionId = null;
         let chatHistory = [];
+        const chatHistoryLimit = 300;
 
-        function getChatStorageKey(sessionId) {
-            return `${chatHistoryPrefix}${sessionId || "unknown"}`;
-        }
-
-        function safeReadHistory(sessionId) {
-            try {
-                const raw = sessionStorage.getItem(getChatStorageKey(sessionId));
-                if (!raw) {
-                    return [];
-                }
-
-                const parsed = JSON.parse(raw);
-                return Array.isArray(parsed) ? parsed : [];
-            } catch {
-                return [];
-            }
-        }
-
-        function safeWriteHistory(sessionId, history) {
-            try {
-                sessionStorage.setItem(getChatStorageKey(sessionId), JSON.stringify(history.slice(-chatHistoryLimit)));
-            } catch {
-                // Ignore storage failures.
-            }
-        }
-
-        function resetChatHistory(sessionId) {
-            const previousSessionId = currentSessionId;
-            if (previousSessionId && previousSessionId !== sessionId) {
-                try {
-                    sessionStorage.removeItem(getChatStorageKey(previousSessionId));
-                } catch {
-                    // Ignore storage failures.
-                }
-            }
-
+        function resetChatHistory(sessionId, history = []) {
             currentSessionId = sessionId || null;
-            chatHistory = safeReadHistory(currentSessionId);
+            chatHistory = Array.isArray(history) ? history.slice(-chatHistoryLimit) : [];
             chat.innerHTML = "";
             chatHistory.forEach(entry => {
-                renderLine(entry.text, entry.kind, false);
+                renderLine(entry.text, entry.source || entry.kind || "normal", false);
             });
             chat.scrollTop = chat.scrollHeight;
         }
@@ -506,7 +470,7 @@
 
             if (kind === "system") {
                 line.style.color = "#7dd3fc";
-            } else if (kind === "player") {
+            } else if (kind === "player" || kind === "local") {
                 line.style.color = "#ffffff";
             } else if (kind === "server") {
                 line.style.color = "#fca5a5";
@@ -514,12 +478,14 @@
 
             chat.appendChild(line);
 
-            if (persist && currentSessionId) {
-                chatHistory.push({ text, kind });
+            if (persist) {
+                chatHistory.push({ text, source: kind });
                 if (chatHistory.length > chatHistoryLimit) {
                     chatHistory = chatHistory.slice(-chatHistoryLimit);
+                    while (chat.childNodes.length > chatHistoryLimit) {
+                        chat.removeChild(chat.firstChild);
+                    }
                 }
-                safeWriteHistory(currentSessionId, chatHistory);
             }
 
             if (wasAtBottom) {
@@ -692,18 +658,24 @@
 
             // Actualizar la barra lateral si el mensaje es de tipo 'sidebar'
             if (data.type == "sidebar") {
-                if (data.sessionId && data.sessionId !== currentSessionId) {
-                    resetChatHistory(data.sessionId);
-                } else if (data.sessionId && currentSessionId === null) {
-                    resetChatHistory(data.sessionId);
-                }
-
                 document.getElementById('ping').textContent = 'Obteniendo...';
                 document.getElementById('version').textContent = data.version;
                 document.getElementById('username').textContent = data.username;
                 document.getElementById('time').textContent = data.time;
                 document.getElementById('server').textContent = data.server;
+                if (data.sessionId && data.sessionId !== currentSessionId) {
+                    resetChatHistory(data.sessionId, Array.isArray(data.chatHistory) ? data.chatHistory : []);
+                } else if (Array.isArray(data.chatHistory)) {
+                    resetChatHistory(data.sessionId || currentSessionId, data.chatHistory);
+                }
 
+            }
+            else if (data.type == "chatHistory") {
+                if (data.sessionId && data.sessionId !== currentSessionId) {
+                    resetChatHistory(data.sessionId, Array.isArray(data.history) ? data.history : []);
+                } else if (Array.isArray(data.history)) {
+                    resetChatHistory(data.sessionId || currentSessionId, data.history);
+                }
             }
             else if (data.type == "updatePing") {
                 document.getElementById('ping').textContent = data.ping + ' ms';
@@ -742,7 +714,6 @@
                 }
 
                 ws.send(text);
-                appendLine(`[JUGADOR]: ${text}`, "player");
                 input.value = "";
             }
         });

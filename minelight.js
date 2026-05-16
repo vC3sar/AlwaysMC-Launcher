@@ -28,6 +28,8 @@ module.exports = function (profile) {
 
   const webClients = new Set();
   const recentChatLines = new Map();
+  const pendingOutboundEchoes = new Map();
+  const chatHistory = [];
   let activeMenu = null;
   let activeMenuToken = 0;
   let activeMenuWindow = null;
@@ -37,6 +39,8 @@ module.exports = function (profile) {
   let menuTransitionTimer = null;
   let ChatMessage = null;
   const DEDUPE_WINDOW_MS = 750;
+  const CHAT_HISTORY_LIMIT = 300;
+  const OUTBOUND_ECHO_WINDOW_MS = 2500;
   const ENABLE_CHAT_KEEPALIVE = false;
 
   function isIgnored(message) {
@@ -67,6 +71,67 @@ module.exports = function (profile) {
     }
 
     return false;
+  }
+
+  function normalizeChatKey(text) {
+    return String(text ?? "")
+      .trim()
+      .toLowerCase();
+  }
+
+  function prunePendingOutboundEchoes() {
+    const now = Date.now();
+    for (const [key, expiry] of pendingOutboundEchoes.entries()) {
+      if (expiry <= now) {
+        pendingOutboundEchoes.delete(key);
+      }
+    }
+  }
+
+  function markOutboundEcho(text) {
+    const key = normalizeChatKey(text);
+    if (!key) {
+      return;
+    }
+
+    pendingOutboundEchoes.set(key, Date.now() + OUTBOUND_ECHO_WINDOW_MS);
+    prunePendingOutboundEchoes();
+  }
+
+  function consumeOutboundEcho(text) {
+    const key = normalizeChatKey(text);
+    if (!key) {
+      return false;
+    }
+
+    prunePendingOutboundEchoes();
+    if (!pendingOutboundEchoes.has(key)) {
+      return false;
+    }
+
+    pendingOutboundEchoes.delete(key);
+    return true;
+  }
+
+  function pushChatHistory(entry) {
+    chatHistory.push(entry);
+    if (chatHistory.length > CHAT_HISTORY_LIMIT) {
+      chatHistory.splice(0, chatHistory.length - CHAT_HISTORY_LIMIT);
+    }
+  }
+
+  function broadcastChatHistory(ws) {
+    if (!ws || ws.readyState !== WebSocket.OPEN) {
+      return;
+    }
+
+    ws.send(
+      JSON.stringify({
+        type: "chatHistory",
+        sessionId,
+        history: chatHistory,
+      })
+    );
   }
 
   function getChatDecoder() {
@@ -219,13 +284,44 @@ module.exports = function (profile) {
 
   function emitChatLine(text, source = "chat") {
     const line = String(text ?? "").trim();
-    if (!line || isIgnored(line) || shouldSuppressDuplicate(line, source)) {
+    if (!line || isIgnored(line)) {
+      return;
+    }
+
+    if (consumeOutboundEcho(line)) {
+      return;
+    }
+
+    if (shouldSuppressDuplicate(line, source)) {
       return;
     }
 
     const prefix = source === "player" ? "[CHAT]" : "[SERVER]";
     console.log(`${prefix} ${line}`);
+    pushChatHistory({ text: line, source });
     broadcast({ type: "chat", text: line, source });
+  }
+
+  function sendLocalChatLine(text, origin = "console") {
+    const line = String(text ?? "").trim();
+    if (!line || isIgnored(line)) {
+      return;
+    }
+
+    if (menuTransitionLocked) {
+      return;
+    }
+
+    markOutboundEcho(line);
+    console.log(`[LOCAL:${origin}] ${line}`);
+    pushChatHistory({ text: line, source: "local" });
+    broadcast({ type: "chat", text: line, source: "local" });
+
+    try {
+      bot.chat(line);
+    } catch (error) {
+      console.log("❌ Error enviando chat al bot:", error);
+    }
   }
 
   function serializeItem(item, slot) {
@@ -385,8 +481,7 @@ module.exports = function (profile) {
     prompt: "> ",
   });
   rl.on("line", (input) => {
-    if (menuTransitionLocked) return;
-    if (input.trim().length > 0) return bot.chat(input);
+    sendLocalChatLine(input, "console");
   });
 
   //manage chat from websocket
@@ -423,6 +518,8 @@ module.exports = function (profile) {
         sessionId,
       })
     );
+
+    broadcastChatHistory(ws);
 
     if (activeMenu) {
       ws.send(JSON.stringify({ type: "menu", menu: activeMenu }));
@@ -492,13 +589,7 @@ module.exports = function (profile) {
         // Plain text falls through to chat.
       }
 
-      if (menuTransitionLocked) {
-        return;
-      }
-
-      if (raw.length > 0) {
-        bot.chat(raw);
-      }
+      sendLocalChatLine(raw, "web");
     });
 
     // Limpiar listeners al cerrar conexión
