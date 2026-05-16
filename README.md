@@ -75,6 +75,7 @@ node main.js
 *   `main.js`: Lógica principal del menú y gestión de perfiles.
 *   `fn/discord.js`: Módulo encargado de la comunicación con la API de Discord.
 *   `config.json`: Variables de entorno y configuración técnica.
+*   `config/ignore.json`: Lista negra de mensajes para filtrar la consola en modo NoGUI. 
 *   `profiles.json`: Almacenamiento local del estado del usuario.
 
 ---
