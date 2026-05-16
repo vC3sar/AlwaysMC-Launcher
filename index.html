@@ -44,7 +44,8 @@
             padding: 0;
             box-sizing: border-box;
             min-width: 0;
-            min-height: clamp(520px, 70vh, 980px);
+            height: calc(100vh - 36px);
+            min-height: calc(100vh - 36px);
             position: sticky;
             top: 18px;
             align-self: start;
@@ -54,7 +55,7 @@
             font-family: monospace;
             white-space: pre-wrap;
             max-width: 100%;
-            flex: 1;
+            flex: 1 1 auto;
             /* ocupa todo el espacio vertical */
             border: 1px solid #393939;
             overflow-y: auto;
@@ -64,7 +65,8 @@
             background: rgb(19, 26, 32);
             color: white;
             box-sizing: border-box;
-            min-height: calc(100vh - 160px);
+            min-height: 0;
+            height: calc(100vh - 160px);
         }
 
         #input {
@@ -339,6 +341,7 @@
             #chat-section {
                 grid-column: 1;
                 grid-row: 1;
+                height: auto;
                 min-height: clamp(420px, 62vh, 760px);
                 position: static;
                 top: auto;
@@ -358,6 +361,7 @@
 
         @media (max-width: 700px) {
             #chat {
+                height: 360px;
                 min-height: 360px;
                 font-size: medium;
             }
@@ -379,6 +383,7 @@
             }
 
             #chat-section {
+                height: auto;
                 min-height: clamp(420px, 62vh, 720px);
             }
 
