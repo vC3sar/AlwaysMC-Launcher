@@ -5,17 +5,19 @@
 ![Discord RPC](https://img.shields.io/badge/Discord-Rich%20Presence-7289DA)
 ![Organization](https://img.shields.io/badge/Org-vazquezsg.ovh-blue)
 
-**AlwaysMC Launcher** es una herramienta versátil diseñada para gestionar perfiles de Minecraft y permitir el acceso al juego en dos modalidades distintas: **GUI (Instancia oficial)** y **NoGUI (Bot/Mineflayer)**. Todo esto acompañado de una integración fluida con **Discord Rich Presence**.
+**AlwaysMC Launcher** es una herramienta ligera diseñada para gestionar perfiles de Minecraft y permitir el acceso al juego en **modo NoGUI (Bot/Mineflayer)**. Está pensada **solo para usuarios de Minecraft no premium / offline**, así que no requiere credenciales de Microsoft ni auth de cuentas premium. Todo esto acompañado de una integración fluida con **Discord Rich Presence**.
 
 ---
 
 ## ✨ Características Principales
 
-*   **🎮 Modo Híbrido:** Elige entre jugar normalmente (GUI) o conectar una instancia automatizada mediante Mineflayer (NoGUI).
-*   **🌐 Sincronización con Mojang:** Obtiene dinámicamente el manifiesto oficial de versiones para asegurar compatibilidad.
+*   **🤖 Modo NoGUI:** Conecta una instancia automatizada mediante Mineflayer con usuario offline.
+*   **🌐 Sincronización con Mojang:** Obtiene dinámicamente el manifiesto oficial de versiones para filtrar las versiones compatibles.
 *   **💬 Discord Rich Presence:** Muestra en tu perfil de Discord qué versión estás jugando y en qué servidor te encuentras.
+*   **🖥 Dashboard local:** Expone una interfaz web local para ver chat, ping y datos de la sesión.
 *   **📁 Gestión de Perfiles:** Guarda automáticamente tu última configuración (usuario, IP, versión) en `profiles.json`.
 *   **🛠️ Configuración Centralizada:** Controla parámetros sensibles como el `clientId` de Discord desde un solo lugar.
+*   **🔒 Sin auth premium:** No usa Microsoft OAuth ni credenciales premium.
 
 ---
 
@@ -42,12 +44,14 @@
     ```
 
 3.  **Configuración inicial:**
-    Asegúrate de editar el archivo `config.json` con tu Client ID de Discord:
+    Asegúrate de editar el archivo `config.json` con tu Client ID de Discord si quieres activar Rich Presence:
     ```json
     {
       "clientId": "TU_CLIENT_ID_AQUÍ"
     }
     ```
+
+    Si no lo configuras, el launcher seguirá funcionando en modo offline y solo desactivará Discord RPC.
 
 ---
 
@@ -56,17 +60,16 @@
 Para iniciar el launcher, simplemente ejecuta:
 
 ```bash
-node main.js
+npm start
 ```
 
 ### Flujo de la aplicación:
 1.  **Detección de Perfil:** Si ya has usado la app, cargará tus datos anteriores.
 2.  **Configuración:** Si deseas cambiar, podrás elegir:
-    *   Nombre de usuario.
+    *   Nickname offline / no premium.
     *   IP del servidor.
-    *   Modo de ejecución (GUI / NoGUI).
-    *   Versión del juego (Filtrada por compatibilidad).
-3.  **Ejecución:** Se activará el **Rich Presence** y se lanzará la instancia seleccionada.
+    *   Versión del juego filtrada por compatibilidad con Mineflayer y el manifiesto oficial.
+3.  **Ejecución:** Se activará el **Rich Presence** si hay `clientId` válido y se lanzará la instancia NoGUI.
 
 ---
 
@@ -76,7 +79,22 @@ node main.js
 *   `fn/discord.js`: Módulo encargado de la comunicación con la API de Discord.
 *   `config.json`: Variables de entorno y configuración técnica.
 *   `config/ignore.json`: Lista negra de mensajes para filtrar la consola en modo NoGUI. 
+*   `index.html`: Panel web local para el chat del bot y la información de la sesión.
 *   `profiles.json`: Almacenamiento local del estado del usuario.
+
+---
+
+## 🔐 Compatibilidad
+
+Este proyecto está enfocado exclusivamente a cuentas **offline / no premium**.
+
+No implementa:
+
+* Auth de Microsoft.
+* Login premium.
+* Integración con credenciales de Mojang/Microsoft para iniciar sesión.
+
+Si en el futuro quieres soporte premium, eso requerirá un flujo de autenticación distinto y credenciales de Microsoft.
 
 ---
 

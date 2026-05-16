@@ -4,26 +4,79 @@ const WebSocket = require("ws");
 const http = require("http");
 const fs = require("fs");
 const path = require("path");
-const AnsiToHtml = require("ansi-to-html");
 const ping = require("ping");
-const convert = new AnsiToHtml();
 const { words: ignoredMessages } = require("./config/ignore.json");
 const { setPresence } = require("./fn/discord");
 
 module.exports = function (profile) {
   const { username, version, ip } = profile;
   console.log(
-    `🤖 Iniciando Mineflayer con usuario ${username} en versión ${version}. Servidor: ${ip}`
+    `🤖 Iniciando Mineflayer en modo offline/no premium con usuario ${username} en versión ${version}. Servidor: ${ip}`
   );
   // CREATE THE PLAYER
   const bot = mineflayer.createBot({
     host: `${ip}`, // puedes parametrizarlo también
     port: 25565,
     username: username, // tomado del perfil
+    auth: "offline",
     version: `${version}`, // tomado del perfil
     keepAlive: true,
     connectTimeout: 60000,
   });
+
+  const webClients = new Set();
+  const recentChatLines = new Map();
+  const DEDUPE_WINDOW_MS = 750;
+
+  function isIgnored(message) {
+    const text = String(message ?? "");
+    return ignoredMessages.some((pattern) => text.includes(pattern));
+  }
+
+  function shouldSuppressDuplicate(text, source) {
+    const normalized = String(text ?? "").trim();
+    if (!normalized) {
+      return true;
+    }
+
+    const key = `${source}:${normalized}`;
+    const now = Date.now();
+    const lastSeen = recentChatLines.get(key) || 0;
+
+    if (now - lastSeen < DEDUPE_WINDOW_MS) {
+      return true;
+    }
+
+    recentChatLines.set(key, now);
+
+    for (const [entryKey, timestamp] of recentChatLines.entries()) {
+      if (now - timestamp > DEDUPE_WINDOW_MS) {
+        recentChatLines.delete(entryKey);
+      }
+    }
+
+    return false;
+  }
+
+  function broadcast(payload) {
+    const data = JSON.stringify(payload);
+    for (const ws of webClients) {
+      if (ws.readyState === WebSocket.OPEN) {
+        ws.send(data);
+      }
+    }
+  }
+
+  function emitChatLine(text, source = "chat") {
+    const line = String(text ?? "").trim();
+    if (!line || isIgnored(line) || shouldSuppressDuplicate(line, source)) {
+      return;
+    }
+
+    const prefix = source === "player" ? "[CHAT]" : "[SERVER]";
+    console.log(`${prefix} ${line}`);
+    broadcast({ type: "chat", text: line, source });
+  }
 
   // MANAGE COMMANDS FROM TERMINAL
   const rl = readline.createInterface({
@@ -56,6 +109,7 @@ module.exports = function (profile) {
   const wss = new WebSocket.Server({ server });
   wss.on("connection", (ws) => {
     console.log("✅ Cliente web conectado");
+    webClients.add(ws);
     // Enviar info inicial
     ws.send(
       JSON.stringify({
@@ -82,35 +136,23 @@ module.exports = function (profile) {
 
     // Recibir mensajes del cliente web y enviarlos al chat del bot
     ws.on("message", (msg) => {
-      bot.chat(msg.toString());
+      const text = msg.toString().trim();
+      if (text.length > 0) {
+        bot.chat(text);
+      }
     });
 
-    // Enviar chat de jugadores al cliente web
-    const chatListener = (username, message) => {
-      if (ignoredMessages.some((p) => message.toString().includes(p))) return;
-      if (username !== bot.username && ws.readyState === WebSocket.OPEN) {
-        ws.send(`${username}: ${message}`);
-      }
-    };
-    bot.on("chat", chatListener);
-
     // Enviar mensajes del servidor al cliente web
-    const serverListener = (message) => {
-      if (ignoredMessages.some((p) => message.toString().includes(p))) return;
-      if (ws.readyState === WebSocket.OPEN) {
-        const html = convert.toHtml(message.toAnsi());
-        // Enviar mensaje al chat
-        ws.send(html);
-
-        //ws.send(`[SERVER] ${message.toString()}`);
-      }
+    const serverListener = (message, position) => {
+      if (position === "chat") return;
+      emitChatLine(message, "server");
     };
-    bot.on("message", serverListener);
+    bot.on("messagestr", serverListener);
 
     // Limpiar listeners al cerrar conexión
     ws.on("close", () => {
-      bot.removeListener("chat", chatListener);
-      bot.removeListener("message", serverListener);
+      webClients.delete(ws);
+      bot.removeListener("messagestr", serverListener);
       clearInterval(interval);
       console.log("❌ Cliente web desconectado");
     });
@@ -142,6 +184,11 @@ module.exports = function (profile) {
     setPresence(`${ip} - ${version}`);
     bot.settings.chat = "enabled";
     console.log(`✅ Conectado como ${bot.username}`);
+    broadcast({
+      type: "chat",
+      text: `✅ Conectado como ${bot.username}`,
+      source: "system",
+    });
     setTimeout(() => {
       //bot.chat("/modalidades");
     }, 5000);
@@ -151,15 +198,7 @@ module.exports = function (profile) {
 
   bot.on("chat", (username, message) => {
     if (username === bot.username) return;
-    if (ignoredMessages.some((p) => message.toString().includes(p))) return;
-    console.log(`[CHAT] ${username}: ${message}`);
-  });
-
-  bot.on("message", (message) => {
-    if (ignoredMessages.some((p) => message.toString().includes(p))) return;
-    if (message.toString().includes("Utilice el comando /login"))
-      //return bot.chat("/login cdncve123");
-    console.log("[SERVER]", message.toAnsi());
+    emitChatLine(`${username}: ${message}`, "player");
   });
 
   // OPTIONS

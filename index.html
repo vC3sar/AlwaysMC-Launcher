@@ -137,45 +137,44 @@
         const ws = new WebSocket("ws://" + location.host);
         const chat = document.getElementById("chat");
         const input = document.getElementById("input");
-        ws.onmessage = e => {
 
-            // Insertamos el HTML directamente en el chat
+        function appendLine(text, kind = "normal") {
+            const wasAtBottom = chat.scrollTop + chat.clientHeight >= chat.scrollHeight - 50;
+            const line = document.createElement("div");
+            line.textContent = text;
+
+            if (kind === "system") {
+                line.style.color = "#7dd3fc";
+            } else if (kind === "player") {
+                line.style.color = "#ffffff";
+            } else if (kind === "server") {
+                line.style.color = "#fca5a5";
+            }
+
+            chat.appendChild(line);
+
+            if (wasAtBottom) {
+                chat.scrollTop = chat.scrollHeight;
+            }
+        }
+
+        ws.onmessage = e => {
             let data;
             try {
                 data = JSON.parse(e.data);
             } catch {
-                // Solo hacer scroll si ya estamos abajo antes de agregar el nuevo mensaje
-                const wasAtBottom = chat.scrollTop + chat.clientHeight >= chat.scrollHeight - 50;
-
-                // Si no es JSON, mostrar como antes
-                chat.innerHTML += e.data + "<br>";
-
-                if (wasAtBottom) {
-                    chat.scrollTop = chat.scrollHeight;
-                }
+                appendLine(String(e.data));
                 return;
             }
 
             if (typeof data.type === "undefined") {
-                // Solo hacer scroll si ya estamos abajo antes de agregar el nuevo mensaje
-                const wasAtBottom = chat.scrollTop + chat.clientHeight >= chat.scrollHeight - 50;
-
-                // Si no es JSON, mostrar como antes
-                chat.innerHTML += e.data + "<br>";
-
-                if (wasAtBottom) {
-                    chat.scrollTop = chat.scrollHeight;
-                }
+                appendLine(String(e.data));
                 return;
             }
 
 
             // Actualizar la barra lateral si el mensaje es de tipo 'sidebar'
             if (data.type == "sidebar") {
-
-                console.log(data.ping)
-                console.log('Actualizando sidebar con:', data);
-                // Actualizar los campos correspondientes
                 document.getElementById('ping').textContent = 'Obteniendo...';
                 document.getElementById('version').textContent = data.version;
                 document.getElementById('username').textContent = data.username;
@@ -184,10 +183,11 @@
 
             }
             else if (data.type == "updatePing") {
-                console.log(data.ping)
-                console.log('Actualizando sidebar con:', data);
-                // Actualizar los campos correspondientes
                 document.getElementById('ping').textContent = data.ping + ' ms';
+            }
+            else if (data.type == "chat") {
+                const prefix = data.source === "player" ? "[CHAT]" : data.source === "system" ? "[SYSTEM]" : "[SERVER]";
+                appendLine(`${prefix} ${data.text}`, data.source);
             }
 
         };
@@ -197,8 +197,13 @@
 
         input.addEventListener("keypress", e => {
             if (e.key === "Enter") {
-                ws.send(input.value);
-                chat.innerHTML += `<span style="color:white;font-size:small;">[JUGADOR]: ${input.value}</span><br>`;
+                const text = input.value.trim();
+                if (text.length === 0) {
+                    return;
+                }
+
+                ws.send(text);
+                appendLine(`[JUGADOR]: ${text}`, "player");
                 input.value = "";
             }
         });

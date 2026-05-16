@@ -1,20 +1,21 @@
 {
   "name": "mc-beta",
   "version": "1.0.0",
-  "main": "index.js",
+  "main": "main.js",
   "scripts": {
+    "start": "node main.js",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "keywords": [],
   "author": "",
   "license": "ISC",
-  "description": "",
+  "description": "Offline/no premium Minecraft launcher with Mineflayer and Discord Rich Presence",
   "dependencies": {
     "ansi-to-html": "^0.7.2",
     "discord-rpc": "^4.0.1",
     "fs": "^0.0.1-security",
     "https": "^1.0.0",
-    "mineflayer": "^4.25.0",
+    "mineflayer": "^4.37.1",
     "mineflayer-pathfinder": "^2.4.5",
     "path": "^0.12.7",
     "ping": "^0.4.4",
