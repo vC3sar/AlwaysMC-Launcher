@@ -19,20 +19,20 @@
         #container {
             display: grid;
             grid-template-columns: minmax(0, 1fr) minmax(280px, 320px);
-            grid-template-rows: auto auto;
+            grid-template-rows: minmax(0, 1fr) auto;
             gap: 18px;
             width: 100%;
             min-height: 100vh;
             height: auto;
             padding: 18px;
             box-sizing: border-box;
-            align-items: start;
-            align-content: start;
+            align-items: stretch;
+            align-content: stretch;
         }
 
         /* Chat e input (60%) */
         #chat-section {
-            margin: 0;
+            margin: 0 0 0 clamp(16px, 4vw, 56px);
             width: auto;
             height: auto;
             min-height: 0;
@@ -44,11 +44,9 @@
             padding: 0;
             box-sizing: border-box;
             min-width: 0;
-            height: calc(100vh - 36px);
-            min-height: calc(100vh - 36px);
-            position: sticky;
-            top: 18px;
-            align-self: start;
+            height: auto;
+            min-height: 75vh;
+            position: static;
         }
 
         #chat {
@@ -66,7 +64,8 @@
             color: white;
             box-sizing: border-box;
             min-height: 0;
-            height: calc(100vh - 160px);
+            height: 75vh;
+            min-height: 75vh;
         }
 
         #input {
@@ -79,19 +78,226 @@
             box-sizing: border-box;
         }
 
+        #reconnect-panel {
+            display: none;
+            align-items: center;
+            justify-content: space-between;
+            gap: 12px;
+            margin-top: 10px;
+            padding: 12px 14px;
+            border-radius: 14px;
+            border: 1px solid rgba(239, 68, 68, 0.20);
+            background: linear-gradient(180deg, rgba(127, 29, 29, 0.22), rgba(30, 14, 18, 0.92));
+            color: #fecaca;
+            box-shadow: 0 12px 28px rgba(0, 0, 0, 0.18);
+        }
+
+        #reconnect-panel.visible {
+            display: flex;
+        }
+
+        #reconnect-panel .reconnect-copy {
+            display: flex;
+            flex-direction: column;
+            gap: 2px;
+            min-width: 0;
+        }
+
+        #reconnect-panel .reconnect-title {
+            font-size: 13px;
+            font-weight: 700;
+            color: #fff1f2;
+        }
+
+        #reconnect-panel .reconnect-subtitle {
+            font-size: 12px;
+            color: #fca5a5;
+        }
+
+        #reconnect-button {
+            border: 1px solid rgba(248, 113, 113, 0.28);
+            background: rgba(248, 113, 113, 0.12);
+            color: #fff;
+            border-radius: 10px;
+            padding: 8px 12px;
+            font-size: 12px;
+            font-weight: 700;
+            cursor: pointer;
+            white-space: nowrap;
+        }
+
+        #reconnect-button:hover {
+            background: rgba(248, 113, 113, 0.18);
+        }
+
+        #reconnect-button:disabled {
+            opacity: 0.6;
+            cursor: wait;
+        }
+
         #sidebar {
             position: static;
             grid-column: 2;
-            grid-row: 1 / span 2;
+            grid-row: 1 / -1;
             width: 100%;
-            height: fit-content;
-            max-height: none;
-            background: #222;
-            color: #fff;
-            padding: 15px;
-            border-left: 2px solid #393939;
+            height: 100%;
+            min-height: 0;
+            padding: 0;
+            border-left: 1px solid rgba(255, 255, 255, 0.08);
             overflow-y: auto;
-            box-shadow: -2px 0 8px rgba(0, 0, 0, 0.4);
+            box-shadow: -14px 0 40px rgba(0, 0, 0, 0.28);
+            color: #eef2ff;
+            background: linear-gradient(180deg, #121821 0%, #0d121a 100%);
+            display: flex;
+            flex-direction: column;
+            justify-content: flex-start;
+        }
+
+        .sidebar-hero {
+            position: relative;
+            padding: 18px 2px 18px;
+            margin-bottom: 14px;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+            overflow: hidden;
+            max-width: 100%;
+            margin-right: 0;
+        }
+
+        .sidebar-meta {
+            display: grid;
+            grid-template-columns: auto 1fr;
+            align-items: center;
+            gap: 10px;
+            margin-top: 10px;
+            font-size: 11px;
+            color: #94a3b8;
+        }
+
+        .sidebar-meta-label {
+            text-transform: uppercase;
+            letter-spacing: 0.12em;
+            color: #64748b;
+        }
+
+        .sidebar-meta-value {
+            color: #e2e8f0;
+            font-weight: 600;
+            text-align: left;
+            padding-left: 8px;
+            justify-self: start;
+            min-width: 0;
+            word-break: break-word;
+        }
+
+        .sidebar-kicker {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+            font-size: 11px;
+            letter-spacing: 0.22em;
+            text-transform: uppercase;
+            color: #f5d06f;
+            margin-bottom: 8px;
+            opacity: 0.95;
+            width: 100%;
+            text-align: center;
+        }
+
+        .sidebar-kicker-divider {
+            width: 100%;
+            height: 2px;
+            margin: 10px 0 14px;
+            border: 0;
+            background: linear-gradient(90deg, transparent, rgba(148, 163, 184, 0.42), rgba(255, 255, 255, 0.58), rgba(148, 163, 184, 0.42), transparent);
+        }
+
+        .sidebar-kicker::before {
+            content: "";
+            width: 8px;
+            height: 8px;
+            border-radius: 999px;
+            background: #ef4444;
+            box-shadow: 0 0 0 4px rgba(239, 68, 68, 0.12);
+            transition: background-color 0.18s ease, box-shadow 0.18s ease;
+            transform: scale(1);
+            transform-origin: center;
+            will-change: transform, box-shadow;
+        }
+
+        .sidebar-kicker[data-status="online"]::before {
+            background: #22c55e;
+            box-shadow: 0 0 0 4px rgba(34, 197, 94, 0.12);
+            animation: sidebarPulse 2.8s ease-in-out infinite;
+        }
+
+        .sidebar-kicker[data-status="connecting"]::before {
+            background: #f59e0b;
+            box-shadow: 0 0 0 4px rgba(245, 158, 11, 0.12);
+        }
+
+        @keyframes sidebarPulse {
+
+            0%,
+            100% {
+                transform: scale(1);
+                box-shadow: 0 0 0 4px rgba(34, 197, 94, 0.12);
+            }
+
+            50% {
+                transform: scale(1.35);
+                box-shadow: 0 0 0 7px rgba(34, 197, 94, 0.18);
+            }
+        }
+
+        @media (prefers-reduced-motion: reduce) {
+            .sidebar-kicker[data-status="online"]::before {
+                animation: none;
+            }
+        }
+
+        .sidebar-hero h2 {
+            margin: 0;
+            font-size: 24px;
+            line-height: 1.05;
+            letter-spacing: -0.03em;
+            color: #ffffff;
+            min-width: 0;
+        }
+
+        .sidebar-hero p {
+            margin: 8px 0 0;
+            font-size: 13px;
+            line-height: 1.55;
+            color: #9aa7ba;
+            max-width: 28ch;
+            min-width: 0;
+        }
+
+        .sidebar-badges {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+            margin-top: 14px;
+        }
+
+        .status-pill {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            padding: 8px 11px;
+            border-radius: 999px;
+            border: 1px solid rgba(34, 197, 94, 0.20);
+            background: rgba(34, 197, 94, 0.10);
+            color: #d7ffe0;
+            font-size: 12px;
+            font-weight: 600;
+        }
+
+        .status-pill.ghost {
+            border-color: rgba(148, 163, 184, 0.18);
+            background: rgba(148, 163, 184, 0.06);
+            color: #c9d2df;
         }
 
         #menu-panel {
@@ -112,7 +318,7 @@
             box-shadow: 0 16px 40px rgba(0, 0, 0, 0.45);
             backdrop-filter: blur(8px);
             overflow: hidden;
-            margin: 0;
+            margin: 0 0 0 clamp(16px, 4vw, 56px);
         }
 
         #menu-panel.visible {
@@ -286,6 +492,32 @@
             color: #cbd5e1;
         }
 
+        #menu-base-filters {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+            padding: 8px 0 2px;
+        }
+
+        .menu-base-filter {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            padding: 6px 10px;
+            border-radius: 999px;
+            border: 1px solid #516074;
+            background: rgba(255, 255, 255, 0.04);
+            color: #dbeafe;
+            font-size: 12px;
+            cursor: pointer;
+            user-select: none;
+        }
+
+        .menu-base-filter input {
+            margin: 0;
+            accent-color: #f5d06f;
+        }
+
         #menu-busy {
             display: none;
             font-size: 12px;
@@ -305,29 +537,100 @@
             pointer-events: none;
         }
 
-        #sidebar h2 {
-            margin-top: 0;
-            color: #ffd700;
-            text-align: center;
-        }
-
         .card {
-            background: #2e2e2e;
-            padding: 10px;
-            margin: 10px 0;
-            border-radius: 8px;
-            box-shadow: 0 0 4px rgba(0, 0, 0, 0.3);
+            position: relative;
+            margin: 12px 0;
+            margin-right: 0;
+            padding: 14px 14px 13px;
+            border-radius: 18px;
+            border: 1px solid rgba(255, 255, 255, 0.07);
+            background:
+                linear-gradient(180deg, rgba(255, 255, 255, 0.05), rgba(255, 255, 255, 0.02)),
+                rgba(8, 12, 18, 0.78);
+            box-shadow:
+                0 10px 30px rgba(0, 0, 0, 0.24),
+                inset 0 1px 0 rgba(255, 255, 255, 0.03);
+            overflow: hidden;
+            max-width: 100%;
         }
 
-        .card h3 {
-            margin: 0 0 5px 0;
-            font-size: 16px;
-            color: #4cafef;
+        #sidebar .card:last-child {
+            margin-bottom: 18px;
+        }
+
+        .card-head {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            margin-bottom: 10px;
+            min-width: 0;
+        }
+
+        .card-icon {
+            width: 38px;
+            height: 38px;
+            border-radius: 14px;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            background: rgba(245, 208, 111, 0.12);
+            color: #f5d06f;
+            font-size: 17px;
+            flex-shrink: 0;
+            border: 1px solid rgba(245, 208, 111, 0.12);
+        }
+
+        .card-head h3 {
+            margin: 0;
+            font-size: 13px;
+            letter-spacing: 0.02em;
+            color: #dbeafe;
+            text-transform: uppercase;
+            min-width: 0;
+        }
+
+        .card-subtitle {
+            margin: 2px 0 0;
+            font-size: 12px;
+            color: #8392a8;
+            min-width: 0;
+        }
+
+        .card-metric {
+            display: grid;
+            grid-template-columns: 92px minmax(0, 1fr);
+            align-items: center;
+            gap: 10px;
+            padding: 10px 0 0;
+            border-top: 1px solid rgba(255, 255, 255, 0.05);
+            min-width: 0;
+        }
+
+        .card-metric:first-of-type {
+            border-top: 0;
+            padding-top: 0;
+        }
+
+        .metric-label {
+            font-size: 11px;
+            color: #7b8798;
+            text-transform: uppercase;
+            letter-spacing: 0.08em;
+            min-width: 0;
+        }
+
+        .metric-value {
+            font-size: 13px;
+            font-weight: 500;
+            color: #f8fafc;
+            text-align: left;
+            word-break: break-word;
+            min-width: 0;
         }
 
         .highlight {
-            color: #ffd700;
-            font-weight: bold;
+            color: #f5d06f;
+            font-weight: 700;
         }
 
         @media (max-width: 1100px) {
@@ -344,18 +647,21 @@
                 height: auto;
                 min-height: clamp(420px, 62vh, 760px);
                 position: static;
-                top: auto;
+                margin-left: 0;
             }
 
             #sidebar {
                 grid-column: 1;
                 grid-row: 2;
-                max-height: none;
+                height: auto;
+                min-height: 0;
+                padding: 18px;
             }
 
             #menu-panel {
                 grid-column: 1;
                 grid-row: 3;
+                margin-left: 0;
             }
         }
 
@@ -374,6 +680,31 @@
             .menu-item {
                 min-height: 96px;
             }
+
+            .sidebar-meta {
+                grid-template-columns: 1fr;
+                gap: 4px;
+            }
+
+            .sidebar-meta-value {
+                text-align: left;
+                padding-left: 0;
+            }
+
+            .card-metric {
+                grid-template-columns: 1fr;
+                gap: 4px;
+            }
+
+            .metric-value {
+                text-align: left;
+            }
+
+            .sidebar-hero,
+            .card {
+                max-width: 100%;
+                margin-right: 0;
+            }
         }
 
         @media (max-height: 780px) {
@@ -391,6 +722,20 @@
                 max-height: 320px;
             }
         }
+
+        body {
+            margin: 0;
+            min-height: 100vh;
+            color: white;
+
+            background:
+                linear-gradient(rgba(0, 0, 0, 0.35), rgba(0, 0, 0, 0.60)),
+                url("https://4kwallpapers.com/images/wallpapers/minecraft-spring-to-2560x1440-21999.jpg");
+
+            background-size: auto;
+            background-position: center;
+            background-repeat: no-repeat;
+        }
     </style>
 </head>
 
@@ -398,29 +743,82 @@
     <div id="container">
         <!-- Columna izquierda: Chat -->
         <div id="chat-section">
-            <div id="chat"></div>
+            <div id="chat" style="overflow-wrap: anywhere;"></div>
+            <div id="reconnect-panel">
+                <div class="reconnect-copy">
+                    <div class="reconnect-title">Bot desconectado</div>
+                    <div class="reconnect-subtitle">Puedes reiniciar la conexión sin recargar la página.</div>
+                </div>
+                <button id="reconnect-button" type="button">Reconectar</button>
+            </div>
             <input type="text" id="input" placeholder="Escribe y presiona Enter">
         </div>
 
         <!-- Columna derecha: Info -->
         <div id="sidebar">
-            <h2>📋 Información</h2>
-            <div class="card">
-                <h3>📅 Fecha: <span class="highlight" id="time">28/08/2025</span></h3>
+            <div class="sidebar-hero">
+                <div class="sidebar-kicker" data-status="offline">Panel en vivo</div>
+                <div class="sidebar-kicker-divider" aria-hidden="true"></div>
+                <h2>Información</h2>
+                <p>Estado de la sesión, jugador y servidor con lectura rápida.</p>
+                <div class="sidebar-meta">
+                    <span class="sidebar-meta-label">Fecha</span>
+                    <span class="sidebar-meta-value highlight" id="time">28/08/2025</span>
+                </div>
+                <div class="sidebar-badges">
+                    <span class="status-pill">Conectado</span>
+                    <span class="status-pill ghost">Offline / No premium</span>
+                </div>
             </div>
 
             <div class="card">
-                <h3>👤 Jugador</h3>
-                <p><b>Nombre: <span class="highlight" id="username">ManoloZP</span></b> </p>
-                <p><b>Versión:</b> <span id="version">1.20.4</span></p>
+                <div class="card-head">
+                    <div class="card-icon">👤</div>
+                    <div>
+                        <h3>Jugador</h3>
+                        <div class="card-subtitle">Identidad de la sesión</div>
+                    </div>
+                </div>
+                <div class="card-metric">
+                    <span class="metric-label">Nombre</span>
+                    <span class="metric-value highlight" id="username">ManoloZP</span>
+                </div>
+                <div class="card-metric">
+                    <span class="metric-label">Versión</span>
+                    <span class="metric-value" id="version">1.20.4</span>
+                </div>
             </div>
+
             <div class="card">
-                <h3>🌐 Conexión</h3>
-                <p><b>Ping:</b> <span id="ping">0 ms</span></p>
+                <div class="card-head">
+                    <div class="card-icon">🌐</div>
+                    <div>
+                        <h3>Conexión</h3>
+                        <div class="card-subtitle">Latencia del servidor</div>
+                    </div>
+                </div>
+                <div class="card-metric">
+                    <span class="metric-label">Ping</span>
+                    <span class="metric-value" id="ping">0 ms</span>
+                </div>
             </div>
+
             <div class="card">
-                <h3>🖥 Servidor</h3>
-                <p id="server">mc.haliacraft.com</p>
+                <div class="card-head">
+                    <div class="card-icon">🖥</div>
+                    <div>
+                        <h3>Servidor</h3>
+                        <div class="card-subtitle">Dirección IP</div>
+                    </div>
+                </div>
+                <div class="card-metric">
+                    <span class="metric-label">Host</span>
+                    <span class="metric-value" id="server">mc.haliacraft.com</span>
+                </div>
+                <div class="card-metric">
+                    <span class="metric-label">Puerto</span>
+                    <span class="metric-value" id="port">25565</span>
+                </div>
             </div>
         </div>
 
@@ -433,6 +831,7 @@
             </div>
             <div id="menu-busy">Cambiando de servidor...</div>
             <input id="menu-search" type="text" placeholder="Buscar por nombre o lore">
+            <div id="menu-base-filters"></div>
             <div id="menu-results"></div>
             <div id="menu-grid"></div>
             <div id="menu-empty" class="menu-empty">Aún no hay opciones disponibles.</div>
@@ -440,23 +839,84 @@
     </div>
 
     <script>
-        const ws = new WebSocket("ws://" + location.host);
+        let ws = null;
+        let reconnectSocketTimer = null;
+        let manualSocketClose = false;
         const chat = document.getElementById("chat");
         const input = document.getElementById("input");
+        const reconnectPanel = document.getElementById("reconnect-panel");
+        const reconnectButton = document.getElementById("reconnect-button");
         const menuPanel = document.getElementById("menu-panel");
         const menuTitle = document.getElementById("menu-title");
         const menuMeta = document.getElementById("menu-meta");
         const menuSearch = document.getElementById("menu-search");
+        const menuBaseFilters = document.getElementById("menu-base-filters");
         const menuResults = document.getElementById("menu-results");
         const menuGrid = document.getElementById("menu-grid");
         const menuEmpty = document.getElementById("menu-empty");
         const menuBusy = document.getElementById("menu-busy");
+        const sidebarKicker = document.querySelector(".sidebar-kicker");
         let activeMenu = null;
         let menuQuery = "";
         let menuBusyState = false;
         let currentSessionId = null;
         let chatHistory = [];
         const chatHistoryLimit = 300;
+        const inputHistoryLimit = 30;
+        const inputHistory = [];
+        let inputHistoryIndex = -1;
+        let inputDraft = "";
+        const hiddenBaseNames = new Set();
+
+        function sendSocketMessage(payload) {
+            if (!ws || ws.readyState !== WebSocket.OPEN) {
+                return false;
+            }
+
+            ws.send(typeof payload === "string" ? payload : JSON.stringify(payload));
+            return true;
+        }
+
+        function pushInputHistory(value) {
+            const text = String(value || "").trim();
+            if (!text) {
+                return;
+            }
+
+            if (inputHistory[inputHistory.length - 1] === text) {
+                inputHistoryIndex = -1;
+                inputDraft = "";
+                return;
+            }
+
+            inputHistory.push(text);
+            if (inputHistory.length > inputHistoryLimit) {
+                inputHistory.splice(0, inputHistory.length - inputHistoryLimit);
+            }
+
+            inputHistoryIndex = -1;
+            inputDraft = "";
+        }
+
+        function stepInputHistory(direction) {
+            if (inputHistory.length === 0) {
+                return;
+            }
+
+            if (inputHistoryIndex === -1) {
+                inputDraft = input.value;
+                inputHistoryIndex = inputHistory.length;
+            }
+
+            inputHistoryIndex = Math.max(0, Math.min(inputHistory.length, inputHistoryIndex + direction));
+
+            if (inputHistoryIndex === inputHistory.length) {
+                input.value = inputDraft;
+                return;
+            }
+
+            input.value = inputHistory[inputHistoryIndex] || "";
+        }
 
         function resetChatHistory(sessionId, history = []) {
             currentSessionId = sessionId || null;
@@ -502,6 +962,21 @@
             renderLine(text, kind, true);
         }
 
+        function setBotStatus(status) {
+            const normalized = String(status || "offline").toLowerCase();
+            sidebarKicker.dataset.status = normalized === "online" ? "online" : normalized === "connecting" ? "connecting" : "offline";
+
+            if (normalized === "online") {
+                reconnectPanel.classList.remove("visible");
+                reconnectButton.disabled = false;
+                reconnectButton.textContent = "Reconectar";
+            } else {
+                reconnectPanel.classList.add("visible");
+                reconnectButton.disabled = normalized === "connecting";
+                reconnectButton.textContent = normalized === "connecting" ? "Reiniciando..." : "Reconectar";
+            }
+        }
+
         function clearMenu() {
             activeMenu = null;
             menuBusyState = false;
@@ -510,6 +985,7 @@
             menuTitle.textContent = "Sin menú activo";
             menuMeta.textContent = "Cuando el servidor abra un inventario, aparecerá aquí.";
             menuResults.textContent = "";
+            menuBaseFilters.innerHTML = "";
             menuGrid.innerHTML = "";
             menuEmpty.textContent = "Aún no hay opciones disponibles.";
             menuBusy.textContent = "Cambiando de servidor...";
@@ -517,12 +993,63 @@
             menuQuery = "";
         }
 
+        function getBaseLabel(item) {
+            return normalizeQueryText(item.name || "");
+        }
+
+        function renderBaseFilters(items) {
+            const baseCounts = new Map();
+
+            for (const item of items) {
+                const baseName = getBaseLabel(item);
+                if (!baseName) {
+                    continue;
+                }
+                baseCounts.set(baseName, (baseCounts.get(baseName) || 0) + 1);
+            }
+
+            const sortedBases = [...baseCounts.entries()].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]));
+            menuBaseFilters.innerHTML = "";
+
+            if (sortedBases.length === 0) {
+                return;
+            }
+
+            sortedBases.forEach(([baseName, count]) => {
+                const label = document.createElement("label");
+                label.className = "menu-base-filter";
+                const checkbox = document.createElement("input");
+                checkbox.type = "checkbox";
+                checkbox.checked = hiddenBaseNames.has(baseName);
+                checkbox.addEventListener("change", () => {
+                    if (checkbox.checked) {
+                        hiddenBaseNames.add(baseName);
+                    } else {
+                        hiddenBaseNames.delete(baseName);
+                    }
+                    applyMenuFilter();
+                });
+
+                const text = document.createElement("span");
+                text.textContent = `Ocultar ${baseName} (${count})`;
+                label.appendChild(checkbox);
+                label.appendChild(text);
+                menuBaseFilters.appendChild(label);
+            });
+        }
+
         function renderMenu(menu) {
+            if (!menu || !Array.isArray(menu.slots) || menu.slots.length === 0) {
+                clearMenu();
+                return;
+            }
+
             activeMenu = menu;
             menuPanel.classList.add("visible");
             menuPanel.classList.toggle("busy", menuBusyState);
             menuTitle.textContent = menu.title || "Menú del servidor";
             menuMeta.textContent = `Slots visibles: ${menu.slots.length}/${menu.slotCount || menu.slots.length} | Token: ${menu.token}`;
+            renderBaseFilters(menu.slots);
             menuGrid.innerHTML = "";
             applyMenuFilter();
         }
@@ -533,6 +1060,53 @@
             }
 
             return lore.map(line => line.trim()).filter(Boolean).join("\n");
+        }
+
+        function normalizeQueryText(value) {
+            return String(value || "")
+                .trim()
+                .toLowerCase();
+        }
+
+        function parseMenuQuery(rawQuery) {
+            const tokens = String(rawQuery || "")
+                .trim()
+                .split(/\s+/)
+                .filter(Boolean);
+            const excludesBase = [];
+            const includes = [];
+
+            for (const token of tokens) {
+                const normalized = normalizeQueryText(token);
+                const baseMatch = normalized.match(/^(?:-base:|!base:|base!=)(.+)$/);
+
+                if (baseMatch) {
+                    const value = baseMatch[1].trim();
+                    if (value) {
+                        excludesBase.push(value);
+                    }
+                    continue;
+                }
+
+                includes.push(normalized);
+            }
+
+            return { includes, excludesBase };
+        }
+
+        function matchesMenuItem(item, filter) {
+            const searchText = normalizeQueryText(item.searchText);
+            const baseName = getBaseLabel(item);
+
+            if (hiddenBaseNames.has(baseName)) {
+                return false;
+            }
+
+            if (filter.includes.length === 0) {
+                return true;
+            }
+
+            return filter.includes.every(term => searchText.includes(term));
         }
 
         function getItemIcon(item) {
@@ -569,11 +1143,9 @@
                 return;
             }
 
-            const query = menuQuery.trim().toLowerCase();
+            const filter = parseMenuQuery(menuQuery);
             const items = Array.isArray(activeMenu.slots) ? activeMenu.slots : [];
-            const visibleItems = query
-                ? items.filter(item => (item.searchText || "").includes(query))
-                : items;
+            const visibleItems = items.filter(item => matchesMenuItem(item, filter));
 
             menuGrid.innerHTML = "";
 
@@ -634,92 +1206,167 @@
                     menuPanel.classList.add("busy");
                     menuBusy.textContent = "Cambiando de servidor...";
                     button.disabled = true;
-                    ws.send(JSON.stringify({
+                    sendSocketMessage({
                         type: "menuAction",
                         token: menuToken,
                         slot: item.slot,
                         clickType: "left",
-                    }));
+                    });
                     appendLine(`[MENU] Click izquierdo en slot ${item.slot}: ${item.displayName || item.name || "Elemento"}`, "system");
                 });
                 menuGrid.appendChild(button);
             });
         }
 
-        ws.onmessage = e => {
-            let data;
-            try {
-                data = JSON.parse(e.data);
-            } catch {
-                appendLine(String(e.data));
-                return;
+        function connectSocket() {
+            if (reconnectSocketTimer) {
+                clearTimeout(reconnectSocketTimer);
+                reconnectSocketTimer = null;
             }
 
-            if (typeof data.type === "undefined") {
-                appendLine(String(e.data));
-                return;
-            }
+            ws = new WebSocket("ws://" + location.host);
 
+            ws.onopen = () => {
+                if (!manualSocketClose) {
+                    reconnectPanel.classList.remove("visible");
+                    reconnectButton.disabled = false;
+                    reconnectButton.textContent = "Reconectar";
+                }
+            };
 
-            // Actualizar la barra lateral si el mensaje es de tipo 'sidebar'
-            if (data.type == "sidebar") {
-                document.getElementById('ping').textContent = 'Obteniendo...';
-                document.getElementById('version').textContent = data.version;
-                document.getElementById('username').textContent = data.username;
-                document.getElementById('time').textContent = data.time;
-                document.getElementById('server').textContent = data.server;
-                if (data.sessionId && data.sessionId !== currentSessionId) {
-                    resetChatHistory(data.sessionId, Array.isArray(data.chatHistory) ? data.chatHistory : []);
-                } else if (Array.isArray(data.chatHistory)) {
-                    resetChatHistory(data.sessionId || currentSessionId, data.chatHistory);
+            ws.onmessage = e => {
+                let data;
+                try {
+                    data = JSON.parse(e.data);
+                } catch {
+                    appendLine(String(e.data));
+                    return;
                 }
 
-            }
-            else if (data.type == "chatHistory") {
-                if (data.sessionId && data.sessionId !== currentSessionId) {
-                    resetChatHistory(data.sessionId, Array.isArray(data.history) ? data.history : []);
-                } else if (Array.isArray(data.history)) {
-                    resetChatHistory(data.sessionId || currentSessionId, data.history);
+                if (typeof data.type === "undefined") {
+                    appendLine(String(e.data));
+                    return;
                 }
-            }
-            else if (data.type == "updatePing") {
-                document.getElementById('ping').textContent = data.ping + ' ms';
-            }
-            else if (data.type == "chat") {
-                const prefix = data.source === "player" ? "[CHAT]" : data.source === "system" ? "[SYSTEM]" : "[SERVER]";
-                appendLine(`${prefix} ${data.text}`, data.source);
-            }
-            else if (data.type == "menu") {
-                renderMenu(data.menu);
-            }
-            else if (data.type == "menuClose") {
-                clearMenu();
-            }
-            else if (data.type == "menuBusy") {
-                menuBusyState = Boolean(data.busy);
-                menuPanel.classList.toggle("busy", menuBusyState);
-                menuBusy.textContent = data.message || "Cambiando de servidor...";
-            }
 
-        };
+
+                // Actualizar la barra lateral si el mensaje es de tipo 'sidebar'
+                if (data.type == "sidebar") {
+                    document.getElementById('ping').textContent = 'Obteniendo...';
+                    document.getElementById('version').textContent = data.version;
+                    document.getElementById('username').textContent = data.username;
+                    document.getElementById('time').textContent = data.time;
+                    document.getElementById('server').textContent = data.server;
+                    document.getElementById('port').textContent = data.port || '25565';
+                    setBotStatus(data.botStatus);
+                    if (data.sessionId && data.sessionId !== currentSessionId) {
+                        resetChatHistory(data.sessionId, Array.isArray(data.chatHistory) ? data.chatHistory : []);
+                    } else if (Array.isArray(data.chatHistory)) {
+                        resetChatHistory(data.sessionId || currentSessionId, data.chatHistory);
+                    }
+
+                }
+                else if (data.type == "chatHistory") {
+                    if (data.sessionId && data.sessionId !== currentSessionId) {
+                        resetChatHistory(data.sessionId, Array.isArray(data.history) ? data.history : []);
+                    } else if (Array.isArray(data.history)) {
+                        resetChatHistory(data.sessionId || currentSessionId, data.history);
+                    }
+                }
+                else if (data.type == "updatePing") {
+                    document.getElementById('ping').textContent = data.ping + ' ms';
+                }
+                else if (data.type == "chat") {
+                    const prefix = data.source === "player" ? "[CHAT]" : data.source === "system" ? "[SYSTEM]" : "[SERVER]";
+                    appendLine(`${prefix} ${data.text}`, data.source);
+                }
+                else if (data.type == "menu") {
+                    renderMenu(data.menu);
+                }
+                else if (data.type == "menuClose") {
+                    clearMenu();
+                }
+                else if (data.type == "menuBusy") {
+                    menuBusyState = Boolean(data.busy);
+                    menuPanel.classList.toggle("busy", menuBusyState);
+                    menuBusy.textContent = data.message || "Cambiando de servidor...";
+                }
+                else if (data.type == "reconnectState") {
+                    const reconnecting = Boolean(data.busy);
+                    reconnectPanel.classList.toggle("visible", reconnecting || sidebarKicker.dataset.status === "offline");
+                    reconnectButton.disabled = reconnecting;
+                    reconnectButton.textContent = reconnecting ? "Reiniciando..." : "Reconectar";
+                    const subtitle = reconnectPanel.querySelector(".reconnect-subtitle");
+                    if (subtitle) {
+                        subtitle.textContent = data.message || "Puedes reiniciar la conexión sin recargar la página.";
+                    }
+                }
+
+            };
+
+            ws.onclose = () => {
+                if (!manualSocketClose) {
+                    reconnectPanel.classList.add("visible");
+                    reconnectButton.disabled = false;
+                    reconnectButton.textContent = "Reconectar";
+                    const subtitle = reconnectPanel.querySelector(".reconnect-subtitle");
+                    if (subtitle) {
+                        subtitle.textContent = "La conexión con el panel se cerró. Reintentando...";
+                    }
+                    reconnectSocketTimer = setTimeout(connectSocket, 1200);
+                }
+            };
+
+            ws.onerror = () => {
+                // El cierre y la reconexión quedan gestionados por onclose.
+            };
+        }
+
+        connectSocket();
 
         menuSearch.addEventListener("input", () => {
             menuQuery = menuSearch.value || "";
             applyMenuFilter();
         });
 
+        reconnectButton.addEventListener("click", () => {
+            if (reconnectButton.disabled) {
+                return;
+            }
+
+            reconnectButton.disabled = true;
+            reconnectButton.textContent = "Solicitando...";
+            sendSocketMessage({
+                type: "reconnectRequest",
+            });
+        });
 
 
 
-        input.addEventListener("keypress", e => {
+
+        input.addEventListener("keydown", e => {
+            if (e.key === "ArrowUp") {
+                e.preventDefault();
+                stepInputHistory(-1);
+                return;
+            }
+
+            if (e.key === "ArrowDown") {
+                e.preventDefault();
+                stepInputHistory(1);
+                return;
+            }
+
             if (e.key === "Enter") {
                 const text = input.value.trim();
                 if (text.length === 0) {
                     return;
                 }
 
-                ws.send(text);
+                pushInputHistory(text);
+                sendSocketMessage(text);
                 input.value = "";
+                inputHistoryIndex = -1;
+                inputDraft = "";
             }
         });
     </script>

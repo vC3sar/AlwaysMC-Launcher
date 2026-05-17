@@ -1,3 +1,11 @@
 {
-  "clientId": "your_discord_app_client_id_here"
+  "clientId": "your_discord_app_client_id_here",
+  "launcher": {
+    "preferredVersions": [
+      "1.21.1"
+    ],
+    "velocityCompatMode": true,
+    "debugLifecycle": true,
+    "reconnectDelayMs": 650
+  }
 }

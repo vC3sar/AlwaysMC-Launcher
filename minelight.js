@@ -8,23 +8,53 @@ const ping = require("ping");
 const nbt = require("prismarine-nbt");
 const { words: ignoredMessages } = require("./config/ignore.json");
 const { setPresence } = require("./fn/discord");
+const appConfig = require("./config.json");
 
 module.exports = function (profile) {
   const { username, version, ip } = profile;
+  const port = Number.parseInt(profile.port ?? "25565", 10) || 25565;
   const sessionId = `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
-  console.log(
-    `🤖 Iniciando Mineflayer en modo offline/no premium con usuario ${username} en versión ${version}. Servidor: ${ip}`
+  const launcherConfig = appConfig && typeof appConfig.launcher === "object" ? appConfig.launcher : {};
+  const reconnectDelayMs = Number.parseInt(launcherConfig.reconnectDelayMs || "650", 10) || 650;
+  const velocityCompatMode = Boolean(launcherConfig.velocityCompatMode);
+  const versionCandidates = Array.from(
+    new Set(
+      [
+        String(version || "").trim(),
+        ...(Array.isArray(launcherConfig.preferredVersions) ? launcherConfig.preferredVersions : []),
+      ]
+        .map((entry) => String(entry).trim())
+        .filter(Boolean)
+    )
   );
-  // CREATE THE PLAYER
-  const bot = mineflayer.createBot({
-    host: `${ip}`, // puedes parametrizarlo también
-    port: 25565,
-    username: username, // tomado del perfil
-    auth: "offline",
-    version: `${version}`, // tomado del perfil
-    keepAlive: true,
-    connectTimeout: 60000,
-  });
+  let currentVersionIndex = 0;
+  const debugLifecycleSetting =
+    process.env.MC_BETA_DEBUG !== undefined
+      ? process.env.MC_BETA_DEBUG
+      : launcherConfig.debugLifecycle !== undefined
+        ? String(launcherConfig.debugLifecycle)
+        : "1";
+  console.log(
+    `🤖 Iniciando Mineflayer en modo offline/no premium con usuario ${username} en versión ${version}. Servidor: ${ip}:${port} | velocityCompatMode=${velocityCompatMode}`
+  );
+  let bot = null;
+
+  function getActiveVersion() {
+    return versionCandidates[currentVersionIndex] || String(version || "").trim() || "1.20.1";
+  }
+
+  function buildBotOptions() {
+    const activeVersion = getActiveVersion();
+    return {
+      host: `${ip}`,
+      port,
+      username: username,
+      auth: "offline",
+      version: `${activeVersion}`,
+      keepAlive: true,
+      connectTimeout: 60000,
+    };
+  }
 
   const webClients = new Set();
   const recentChatLines = new Map();
@@ -38,10 +68,27 @@ module.exports = function (profile) {
   let menuTransitionLocked = false;
   let menuTransitionTimer = null;
   let ChatMessage = null;
+  let botReady = false;
+  let botStatus = "offline";
+  let reconnectInProgress = false;
+  let reconnectTimer = null;
+  const pendingOutboundMessages = [];
   const DEDUPE_WINDOW_MS = 750;
   const CHAT_HISTORY_LIMIT = 300;
   const OUTBOUND_ECHO_WINDOW_MS = 2500;
   const ENABLE_CHAT_KEEPALIVE = false;
+  const DEBUG_LIFECYCLE = String(debugLifecycleSetting).toLowerCase() !== "0";
+  const lifecycleStartAt = Date.now();
+
+  function debugLog(event, details = "") {
+    if (!DEBUG_LIFECYCLE) {
+      return;
+    }
+
+    const elapsed = Date.now() - lifecycleStartAt;
+    const suffix = details ? ` | ${details}` : "";
+    console.log(`[DEBUG +${elapsed}ms] ${event}${suffix}`);
+  }
 
   function isIgnored(message) {
     const text = String(message ?? "");
@@ -132,6 +179,104 @@ module.exports = function (profile) {
         history: chatHistory,
       })
     );
+  }
+
+  function broadcastSidebarState(status) {
+    botStatus = status;
+    broadcast({
+      type: "sidebar",
+      ping: 0,
+      version: version,
+      username: username,
+      port,
+      time: new Date().toLocaleDateString(),
+      server: ip,
+      sessionId,
+      chatHistory,
+      botStatus,
+    });
+  }
+
+  function clearReconnectTimer() {
+    if (reconnectTimer) {
+      clearTimeout(reconnectTimer);
+      reconnectTimer = null;
+    }
+  }
+
+  function createBotInstance() {
+    debugLog("bot:create", `host=${ip} version=${getActiveVersion()} ready=${botReady} attempt=${currentVersionIndex + 1}/${versionCandidates.length}`);
+    if (bot) {
+      try {
+        debugLog("bot:dispose", "removing listeners and ending previous instance");
+        bot.removeAllListeners();
+        bot.end("reconnect");
+      } catch {
+        // ignore
+      }
+    }
+
+    botReady = false;
+    botStatus = "connecting";
+    broadcastSidebarState("connecting");
+
+    bot = mineflayer.createBot(buildBotOptions());
+    debugLog("bot:created", `username=${username}`);
+    registerBotEvents(bot);
+    return bot;
+  }
+
+  function requestLocalRestart({ resetVersionCycle = false } = {}) {
+    if (reconnectInProgress) {
+      debugLog("reconnect:ignored", "already in progress");
+      return;
+    }
+
+    if (resetVersionCycle) {
+      currentVersionIndex = 0;
+    }
+
+    reconnectInProgress = true;
+    debugLog("reconnect:start", "recreating bot inside current process");
+    broadcastSidebarState("reconnecting");
+    broadcast({
+      type: "reconnectState",
+      busy: true,
+      message: "Reconectando al servidor...",
+    });
+
+    clearReconnectTimer();
+    reconnectTimer = setTimeout(() => {
+      reconnectTimer = null;
+      try {
+        debugLog("reconnect:spawn-bot", "calling createBotInstance()");
+        createBotInstance();
+      } catch (error) {
+        reconnectInProgress = false;
+        broadcastSidebarState("offline");
+        broadcast({
+          type: "reconnectState",
+          busy: false,
+          message: "No se pudo reiniciar el bot.",
+        });
+        console.log("❌ Error al recrear el bot:", error);
+      }
+    }, reconnectDelayMs);
+  }
+
+  function scheduleVersionRetry(reason) {
+    if (!velocityCompatMode) {
+      return false;
+    }
+
+    if (currentVersionIndex >= versionCandidates.length - 1) {
+      return false;
+    }
+
+    currentVersionIndex += 1;
+    debugLog("bot:retry-version", `next=${getActiveVersion()} reason=${reason}`);
+    requestLocalRestart({ resetVersionCycle: false });
+    return true;
   }
 
   function getChatDecoder() {
@@ -313,10 +458,30 @@ module.exports = function (profile) {
     pushChatHistory({ text: line, source: "player" });
     broadcast({ type: "chat", text: line, source: "player" });
 
+    if (!botReady) {
+      pendingOutboundMessages.push(line);
+      return;
+    }
+
     try {
       bot.chat(line);
     } catch (error) {
       console.log("❌ Error enviando chat al bot:", error);
+    }
+  }
+
+  function flushPendingOutboundMessages() {
+    if (!botReady || pendingOutboundMessages.length === 0) {
+      return;
+    }
+
+    while (pendingOutboundMessages.length > 0) {
+      const nextMessage = pendingOutboundMessages.shift();
+      try {
+        bot.chat(nextMessage);
+      } catch (error) {
+        console.log("❌ Error enviando chat pendiente al bot:", error);
+      }
     }
   }
 
@@ -513,6 +678,7 @@ module.exports = function (profile) {
         server: ip,
         sessionId,
         chatHistory,
+        botStatus,
       })
     );
 
@@ -541,6 +707,11 @@ module.exports = function (profile) {
 
       try {
         const data = JSON.parse(raw);
+        if (data && data.type === "reconnectRequest") {
+          requestLocalRestart();
+          return;
+        }
+
         if (data && data.type === "menuAction") {
           if (!activeMenu || data.token !== activeMenu.token) {
             return;
@@ -606,78 +777,141 @@ module.exports = function (profile) {
     }, 24000);
   }
 
-  // JOIN A SERVER MODE
-  bot.on("windowOpen", (window) => {
-    const parsedTitle = decodeMinecraftText(window.title).trim();
-    console.log(`📂 Menú abierto: ${parsedTitle || "[sin titulo]"}`);
-    console.dir(window.title, { depth: null, colors: true });
-    menuTransitionLocked = false;
-    setMenuTransitionLocked(false);
-    attachWindowRealtime(window);
-    broadcastMenu(window, { newToken: true });
-  });
+  function registerBotEvents(currentBot) {
+    // JOIN A SERVER MODE
+    currentBot.on("windowOpen", (window) => {
+      const parsedTitle = decodeMinecraftText(window.title).trim();
+      console.log(`📂 Menú abierto: ${parsedTitle || "[sin titulo]"}`);
+      console.dir(window.title, { depth: null, colors: true });
+      menuTransitionLocked = false;
+      setMenuTransitionLocked(false);
+      attachWindowRealtime(window);
+      broadcastMenu(window, { newToken: true });
+    });
 
-  bot.on("windowClose", () => {
-    console.log("📂 Menú cerrado");
-    menuTransitionLocked = false;
-    setMenuTransitionLocked(false);
-    detachWindowRealtime();
-    closeMenu();
-  });
+    currentBot.on("windowClose", () => {
+      console.log("📂 Menú cerrado");
+      menuTransitionLocked = false;
+      setMenuTransitionLocked(false);
+      detachWindowRealtime();
+      closeMenu();
+    });
 
-  // MAIN EVENTS
-  bot.on("spawn", () => {
-    menuTransitionLocked = false;
-    setMenuTransitionLocked(false);
-    setPresence(`${ip} - ${version}`);
-    bot.settings.chat = "enabled";
-    console.log(`✅ Conectado como ${bot.username}`);
-    emitChatLine(`✅ Conectado como ${bot.username}`, "system");
-    setTimeout(() => {
-      //bot.chat("/modalidades");
-    }, 5000);
-  });
+    // MAIN EVENTS
+    currentBot.on("login", () => {
+      debugLog("bot:login", `username=${currentBot.username}`);
+    });
 
-  // CHAT HANDLER
+    currentBot.on("spawn", () => {
+      debugLog("bot:spawn", `username=${currentBot.username}`);
+      botReady = true;
+      reconnectInProgress = false;
+      clearReconnectTimer();
+      menuTransitionLocked = false;
+      setMenuTransitionLocked(false);
+      setPresence(`${ip} - ${version}`);
+      currentBot.settings.chat = "enabled";
+      broadcastSidebarState("online");
+      console.log(`✅ Conectado como ${currentBot.username}`);
+      emitChatLine(`✅ Conectado como ${currentBot.username}`, "system");
+      flushPendingOutboundMessages();
+      setTimeout(() => {
+        //currentBot.chat("/modalidades");
+      }, 5000);
+    });
 
-  bot.on("chat", (username, message) => {
-    if (username === bot.username) return;
-    emitChatLine(`${username}: ${message}`, "player");
-  });
+    currentBot.once("login", () => {
+      console.log("🔐 Login completado, esperando spawn...");
+    });
 
-  bot.on("messagestr", (message, position) => {
-    if (position === "chat") return;
-    emitChatLine(message, "server");
-  });
+    // CHAT HANDLER
 
-  // OPTIONS
-  bot.setMaxListeners(50); // Por ejemplo, 50 listeners
+    currentBot.on("chat", (username, message) => {
+      if (username === currentBot.username) return;
+      emitChatLine(`${username}: ${message}`, "player");
+    });
 
-  // MANAGE DISCONNECTIONS & ERRORS
-  bot.on("kicked", (reason, loggedIn) => {
-    menuTransitionLocked = false;
-    setMenuTransitionLocked(false);
-    detachWindowRealtime();
-    console.log(
-      "❌ Kicked:",
-      JSON.stringify(reason),
-      "(loggedIn:",
-      loggedIn,
-      ")"
-    );
-  });
+    currentBot.on("messagestr", (message, position) => {
+      if (position === "chat") return;
+      emitChatLine(message, "server");
+    });
 
-  bot.on("disconnect", (reason) => {
-    console.log(`🔌 Session closed: ${reason}`);
-  });
+    // OPTIONS
+    currentBot.setMaxListeners(50); // Por ejemplo, 50 listeners
 
-  bot.on("error", (err) => {
-    console.log("❌ Error:", err);
-  });
+    // MANAGE DISCONNECTIONS & ERRORS
+    currentBot.on("kicked", (reason, loggedIn) => {
+      debugLog(
+        "bot:kicked",
+        `loggedIn=${loggedIn} reason=${decodeMinecraftText(reason) || "unknown"}`
+      );
+      menuTransitionLocked = false;
+      setMenuTransitionLocked(false);
+      detachWindowRealtime();
+      botReady = false;
+      pendingOutboundMessages.length = 0;
+      broadcastSidebarState("offline");
+      reconnectInProgress = false;
+      clearReconnectTimer();
+      if (loggedIn === false && scheduleVersionRetry("kicked-before-spawn")) {
+        return;
+      }
+      console.log(
+        "❌ Kicked:",
+        decodeMinecraftText(reason),
+        JSON.stringify(reason),
+        "(loggedIn:",
+        loggedIn,
+        ")"
+      );
+    });
 
-  bot.on("end", () => {
-    console.log("🔌 Disconnected from the server");
-  });
+    currentBot.on("disconnect", (reason) => {
+      debugLog("bot:disconnect", `reason=${String(reason || "unknown")}`);
+      const wasReady = botReady;
+      botReady = false;
+      pendingOutboundMessages.length = 0;
+      broadcastSidebarState("offline");
+      reconnectInProgress = false;
+      clearReconnectTimer();
+      if (!wasReady && scheduleVersionRetry("disconnect-before-spawn")) {
+        return;
+      }
+      console.log(`🔌 Session closed: ${reason}`);
+    });
+
+    currentBot.on("error", (err) => {
+      debugLog("bot:error", err && err.message ? err.message : String(err));
+      console.log("❌ Error:", err);
+    });
+
+    currentBot.on("end", () => {
+      debugLog("bot:end", "connection ended");
+      const wasReady = botReady;
+      botReady = false;
+      pendingOutboundMessages.length = 0;
+      broadcastSidebarState("offline");
+      reconnectInProgress = false;
+      clearReconnectTimer();
+      if (!wasReady && scheduleVersionRetry("end-before-spawn")) {
+        return;
+      }
+      console.log("🔌 Disconnected from the server");
+    });
+
+    // CHUNKS MANAGER
+    currentBot.on("chunkColumnLoad", (chunk) => {
+      try {
+        // procesamiento de chunk si lo necesitas
+      } catch (err) {
+        console.log("❌ Error cargando chunk, ignorando...");
+      }
+    });
+
+    currentBot.on("chunkColumnUnload", (chunk) => {
+      // opcional, solo para depuración
+    });
+  }
 
   process.on("uncaughtException", (err) => {
     console.log("❌ UncaughtException:", err);
@@ -686,18 +920,7 @@ module.exports = function (profile) {
     console.log("❌ UnhadleRejection:", promise, "reason:", reason);
   });
 
-  // CHUNKS MANAGER
-  bot.on("chunkColumnLoad", (chunk) => {
-    try {
-      // procesamiento de chunk si lo necesitas
-    } catch (err) {
-      console.log("❌ Error cargando chunk, ignorando...");
-    }
-  });
-
-  bot.on("chunkColumnUnload", (chunk) => {
-    // opcional, solo para depuración
-  });
+  createBotInstance();
 
   return bot; // por si luego lo quieres manipular desde fuera
 };
