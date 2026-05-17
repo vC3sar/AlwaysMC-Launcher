@@ -1,6 +1,7 @@
 {
   "username": "manoloZP",
   "ip": "mc.haliacraft.com",
+  "port": 25565,
   "version": "1.21.1",
   "mode": "nogui"
 }

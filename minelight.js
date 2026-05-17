@@ -647,13 +647,35 @@ module.exports = function (profile) {
 
   //manage chat from websocket
   const server = http.createServer((req, res) => {
-    const filePath = path.join(__dirname, "index.html");
-    fs.readFile(filePath, (err, data) => {
+    const requestUrl = new URL(req.url || "/", "http://localhost");
+    const route = requestUrl.pathname === "/" ? "/index.html" : requestUrl.pathname;
+
+    const fileMap = {
+      "/index.html": {
+        file: path.join(__dirname, "index.html"),
+        contentType: "text/html; charset=utf-8",
+      },
+      "/css/main.css": {
+        file: path.join(__dirname, "css", "main.css"),
+        contentType: "text/css; charset=utf-8",
+      },
+    };
+
+    const asset = fileMap[route];
+    if (!asset) {
+      res.writeHead(404, { "Content-Type": "text/plain; charset=utf-8" });
+      return res.end("Not found");
+    }
+
+    fs.readFile(asset.file, (err, data) => {
       if (err) {
-        res.writeHead(500);
-        return res.end("Error cargando archivo HTML");
+        res.writeHead(500, { "Content-Type": "text/plain; charset=utf-8" });
+        return res.end(`Error cargando ${route}`);
       }
-      res.writeHead(200, { "Content-Type": "text/html" });
+      res.writeHead(200, {
+        "Content-Type": asset.contentType,
+        "Cache-Control": "no-store",
+      });
       res.end(data);
     });
   });
