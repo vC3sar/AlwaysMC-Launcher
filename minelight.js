@@ -52,6 +52,8 @@ module.exports = function (profile) {
       auth: "offline",
       version: `${activeVersion}`,
       keepAlive: true,
+      hideErrors: true,
+      logErrors: false,
       connectTimeout: 60000,
     };
   }
@@ -186,7 +188,7 @@ module.exports = function (profile) {
     broadcast({
       type: "sidebar",
       ping: 0,
-      version: version,
+      version: getActiveVersion(),
       username: username,
       port,
       time: new Date().toLocaleDateString(),
@@ -547,10 +549,15 @@ module.exports = function (profile) {
       return null;
     }
 
+    let rawSlots = null;
+    let rawTitle = null;
     let slots = [];
     try {
-      slots = Array.isArray(window.slots)
-        ? window.slots
+      rawSlots = window.slots;
+      rawTitle = window.title;
+
+      slots = Array.isArray(rawSlots)
+        ? rawSlots
             .map((item, slot) => serializeItem(item, slot))
             .filter(Boolean)
         : [];
@@ -564,8 +571,8 @@ module.exports = function (profile) {
     return {
       token,
       windowId: window.id,
-      title: decodeMinecraftText(window.title || "Menú").trim(),
-      slotCount: Array.isArray(window.slots) ? window.slots.length : 0,
+      title: decodeMinecraftText(rawTitle || "Menú").trim(),
+      slotCount: Array.isArray(rawSlots) ? rawSlots.length : 0,
       slots,
     };
   }
@@ -577,8 +584,10 @@ module.exports = function (profile) {
     }
   }
 
-  function broadcastMenu(window, { newToken = false } = {}) {
-    if (newToken || !activeMenu) {
+  function broadcastMenu(window, { newToken = false, token = null } = {}) {
+    if (typeof token === "number" && Number.isFinite(token)) {
+      activeMenuToken = token;
+    } else if (newToken || !activeMenu) {
       activeMenuToken += 1;
     }
 
@@ -586,17 +595,39 @@ module.exports = function (profile) {
       activeMenu = serializeMenu(window, activeMenuToken);
     } catch (error) {
       if (handleMenuReadError(error, "menu:broadcast")) {
-        return;
+        return false;
       }
       throw error;
     }
     if (!activeMenu) {
-      return;
+      return false;
     }
 
     console.log("📋 Menú detectado:");
     console.dir(activeMenu, { depth: null, colors: true });
     broadcast({ type: "menu", menu: activeMenu });
+    return true;
+  }
+
+  function retryBroadcastMenu(window, { newToken = false, attempts = 5, delayMs = 140 } = {}) {
+    const targetToken = newToken ? activeMenuToken + 1 : activeMenuToken;
+    let remainingAttempts = attempts;
+
+    const attempt = () => {
+      if (!activeMenuWindow || !window || activeMenuWindow.id !== window.id) {
+        return;
+      }
+
+      const success = broadcastMenu(window, { newToken, token: targetToken });
+      if (success || remainingAttempts <= 0) {
+        return;
+      }
+
+      remainingAttempts -= 1;
+      setTimeout(attempt, delayMs);
+    };
+
+    setTimeout(attempt, delayMs);
   }
 
   function scheduleMenuRefresh(window) {
@@ -606,7 +637,7 @@ module.exports = function (profile) {
       if (!activeMenuWindow || !window || activeMenuWindow.id !== window.id) {
         return;
       }
-      broadcastMenu(window, { newToken: false });
+      retryBroadcastMenu(window, { newToken: false, attempts: 3, delayMs: 90 });
     }, 60);
   }
 
@@ -615,6 +646,9 @@ module.exports = function (profile) {
     activeMenuWindow = window;
 
     activeMenuUpdateHandler = () => {
+      if (menuTransitionLocked) {
+        return;
+      }
       scheduleMenuRefresh(window);
     };
 
@@ -728,7 +762,7 @@ module.exports = function (profile) {
       JSON.stringify({
         type: "sidebar",
         ping: 0,
-        version: version,
+        version: getActiveVersion(),
         username: username,
         time: new Date().toLocaleDateString(),
         server: ip,
@@ -852,15 +886,7 @@ module.exports = function (profile) {
       menuTransitionLocked = false;
       setMenuTransitionLocked(false);
       attachWindowRealtime(window);
-      setTimeout(() => {
-        try {
-          broadcastMenu(window, { newToken: true });
-        } catch (error) {
-          if (!handleMenuReadError(error, "menu:open")) {
-            console.log("❌ Error construyendo el menú:", error);
-          }
-        }
-      }, 25);
+      retryBroadcastMenu(window, { newToken: true, attempts: 5, delayMs: 140 });
     });
 
     currentBot.on("windowClose", () => {
@@ -883,7 +909,7 @@ module.exports = function (profile) {
       clearReconnectTimer();
       menuTransitionLocked = false;
       setMenuTransitionLocked(false);
-      setPresence(`${ip} - ${version}`);
+      setPresence(`${ip} - ${getActiveVersion()}`);
       currentBot.settings.chat = "enabled";
       broadcastSidebarState("online");
       console.log(`✅ Conectado como ${currentBot.username}`);

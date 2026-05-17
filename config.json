@@ -2,7 +2,7 @@
   "clientId": "your_discord_app_client_id_here",
   "launcher": {
     "preferredVersions": [
-      "1.21.1"
+      "1.21.11"
     ],
     "velocityCompatMode": true,
     "debugLifecycle": true,
