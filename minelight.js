@@ -418,6 +418,25 @@ module.exports = function (profile) {
     };
   }
 
+  function isPartialReadError(error) {
+    const message = String(error?.message || error || "");
+    const name = String(error?.name || "");
+    return (
+      name === "PartialReadError" ||
+      message.includes("PartialReadError") ||
+      message.includes("Unexpected buffer end while reading VarInt")
+    );
+  }
+
+  function handleMenuReadError(error, context = "menu") {
+    if (isPartialReadError(error)) {
+      debugLog(`${context}:partial-read`, "ignoring truncated packet while menu is changing");
+      return true;
+    }
+
+    return false;
+  }
+
   function broadcast(payload) {
     const data = JSON.stringify(payload);
     for (const ws of webClients) {
@@ -528,11 +547,19 @@ module.exports = function (profile) {
       return null;
     }
 
-    const slots = Array.isArray(window.slots)
-      ? window.slots
-          .map((item, slot) => serializeItem(item, slot))
-          .filter(Boolean)
-      : [];
+    let slots = [];
+    try {
+      slots = Array.isArray(window.slots)
+        ? window.slots
+            .map((item, slot) => serializeItem(item, slot))
+            .filter(Boolean)
+        : [];
+    } catch (error) {
+      if (handleMenuReadError(error, "menu:serialize")) {
+        return null;
+      }
+      throw error;
+    }
 
     return {
       token,
@@ -555,7 +582,14 @@ module.exports = function (profile) {
       activeMenuToken += 1;
     }
 
-    activeMenu = serializeMenu(window, activeMenuToken);
+    try {
+      activeMenu = serializeMenu(window, activeMenuToken);
+    } catch (error) {
+      if (handleMenuReadError(error, "menu:broadcast")) {
+        return;
+      }
+      throw error;
+    }
     if (!activeMenu) {
       return;
     }
@@ -800,6 +834,16 @@ module.exports = function (profile) {
   }
 
   function registerBotEvents(currentBot) {
+    if (currentBot._client && !currentBot._client.__mcBetaErrorHandlerAttached) {
+      currentBot._client.__mcBetaErrorHandlerAttached = true;
+      currentBot._client.on("error", (err) => {
+        if (handleMenuReadError(err, "client:error")) {
+          return;
+        }
+        debugLog("client:error", err && err.message ? err.message : String(err));
+      });
+    }
+
     // JOIN A SERVER MODE
     currentBot.on("windowOpen", (window) => {
       const parsedTitle = decodeMinecraftText(window.title).trim();
@@ -808,7 +852,15 @@ module.exports = function (profile) {
       menuTransitionLocked = false;
       setMenuTransitionLocked(false);
       attachWindowRealtime(window);
-      broadcastMenu(window, { newToken: true });
+      setTimeout(() => {
+        try {
+          broadcastMenu(window, { newToken: true });
+        } catch (error) {
+          if (!handleMenuReadError(error, "menu:open")) {
+            console.log("❌ Error construyendo el menú:", error);
+          }
+        }
+      }, 25);
     });
 
     currentBot.on("windowClose", () => {
@@ -903,6 +955,9 @@ module.exports = function (profile) {
     });
 
     currentBot.on("error", (err) => {
+      if (handleMenuReadError(err, "bot:error")) {
+        return;
+      }
       debugLog("bot:error", err && err.message ? err.message : String(err));
       console.log("❌ Error:", err);
     });
@@ -936,9 +991,15 @@ module.exports = function (profile) {
   }
 
   process.on("uncaughtException", (err) => {
+    if (handleMenuReadError(err, "process:uncaughtException")) {
+      return;
+    }
     console.log("❌ UncaughtException:", err);
   });
   process.on("unhandledRejection", (reason, promise) => {
+    if (handleMenuReadError(reason, "process:unhandledRejection")) {
+      return;
+    }
     console.log("❌ UnhadleRejection:", promise, "reason:", reason);
   });
 
