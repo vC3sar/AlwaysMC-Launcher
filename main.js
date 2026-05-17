@@ -57,6 +57,10 @@ const preferredVersions = Array.isArray(launcherConfig.preferredVersions)
   : [];
 const MINEFLAYER_VERSIONS = preferredVersions.length > 0 ? preferredVersions : FALLBACK_MINEFLAYER_VERSIONS;
 
+function getPreferredLauncherVersion() {
+  return preferredVersions[0] || null;
+}
+
 // --- Helpers ---
 function fetchManifest() {
   return new Promise((resolve, reject) => {
@@ -128,7 +132,11 @@ function normalizeProfile(profile) {
   const parsedAddress = parseHostAndPort(profile.ip, profile.port);
   const ip = parsedAddress.ip;
   const port = Number.parseInt(profile.port ?? parsedAddress.port ?? "25565", 10) || parsedAddress.port || 25565;
-  const version = String(profile.version ?? "").trim() || "1.20.1";
+  const preferredVersion = getPreferredLauncherVersion();
+  const requestedVersion = String(profile.version ?? "").trim();
+  const version = preferredVersion && (!requestedVersion || requestedVersion !== preferredVersion)
+    ? preferredVersion
+    : requestedVersion || preferredVersion || "1.20.1";
 
   if (!username) {
     return null;
