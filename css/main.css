@@ -33,10 +33,10 @@ body {
 }
 
 .launcher-shell {
-    width: min(760px, 92vw);
+    width: min(560px, 90vw);
     border: 1px solid rgba(192, 63, 63, 0.35);
     border-radius: 14px;
-    padding: 24px;
+    padding: 16px;
     background: rgba(8, 8, 10, 0.86);
     box-shadow: 0 30px 80px rgba(0, 0, 0, 0.62);
     position: relative;
@@ -44,7 +44,7 @@ body {
 }
 
 .launcher-brand {
-    font-size: 46px;
+    font-size: 38px;
     letter-spacing: 0.06em;
     color: #f0d8b8;
     text-transform: uppercase;
@@ -54,7 +54,7 @@ body {
     color: #be9d7c;
     font-size: 12px;
     letter-spacing: 0.25em;
-    margin-bottom: 20px;
+    margin-bottom: 12px;
 }
 
 .launcher-menu,
@@ -62,6 +62,7 @@ body {
     display: flex;
     flex-direction: column;
     gap: 12px;
+    align-items: flex-start;
 }
 
 .launcher-view {
@@ -77,6 +78,8 @@ body {
     border-radius: 10px;
     text-align: left;
     cursor: pointer;
+    width: clamp(220px, 32vw, 360px);
+    max-width: 100%;
 }
 
 .launcher-btn:hover,
@@ -86,6 +89,26 @@ body {
 
 .launcher-btn.alt {
     text-align: center;
+    width: clamp(180px, 22vw, 260px);
+}
+
+#continue-last-btn,
+#create-new-btn {
+    width: 100%;
+    max-width: none;
+}
+
+#launcher-play-view .launcher-row {
+    width: 100%;
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 10px;
+}
+
+#play-back-btn {
+    width: 100%;
+    text-align: center;
+    align-self: stretch;
 }
 
 .launcher-section-title {
@@ -97,6 +120,44 @@ body {
 .launcher-row {
     display: flex;
     gap: 10px;
+    align-items: center;
+}
+
+.launcher-row label {
+    color: #d5b896;
+    font-size: 13px;
+    min-width: 86px;
+}
+
+.launcher-row select {
+    border: 1px solid rgba(177, 133, 102, 0.35);
+    background: rgba(0, 0, 0, 0.4);
+    color: #e7ddd0;
+    border-radius: 8px;
+    padding: 8px 10px;
+    min-width: 200px;
+}
+
+.launcher-row select option,
+.launcher-form select option {
+    background: #141417;
+    color: #f3e8d8;
+}
+
+#cfg-preferred-versions {
+    min-height: 156px;
+    padding: 4px;
+}
+
+#cfg-preferred-versions option {
+    padding: 6px 8px;
+    border-radius: 6px;
+}
+
+#cfg-preferred-versions option:checked {
+    background: linear-gradient(180deg, #b93838, #8f2525);
+    color: #fff5f5;
+    font-weight: 700;
 }
 
 .launcher-form {
@@ -110,7 +171,7 @@ body {
 }
 
 .launcher-form input,
-#config-editor {
+.launcher-form select {
     border: 1px solid rgba(177, 133, 102, 0.35);
     background: rgba(0, 0, 0, 0.4);
     color: #e7ddd0;
@@ -118,10 +179,22 @@ body {
     padding: 10px;
 }
 
-#config-editor {
-    min-height: 240px;
-    font-family: Consolas, monospace;
-    resize: vertical;
+.launcher-form label {
+    color: #d5b896;
+    font-size: 12px;
+    margin-top: 2px;
+}
+
+.launcher-check {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    color: #e7ddd0;
+    font-size: 13px;
+}
+
+.launcher-check input[type="checkbox"] {
+    accent-color: #c74949;
 }
 
 #info-content {

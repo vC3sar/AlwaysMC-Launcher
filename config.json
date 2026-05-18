@@ -6,6 +6,7 @@
     ],
     "velocityCompatMode": true,
     "debugLifecycle": true,
-    "reconnectDelayMs": 650
+    "reconnectDelayMs": 650,
+    "menuBackgroundMode": "auto"
   }
 }

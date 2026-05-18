@@ -123,7 +123,12 @@ function createWindow() {
       },
       {
         label: "Ventana",
-        submenu: [{ role: "minimize" }, { role: "close" }],
+        submenu: [
+          { role: "togglefullscreen", label: "Pantalla completa (F11)", accelerator: "F11" },
+          { type: "separator" },
+          { role: "minimize" },
+          { role: "close" },
+        ],
       },
     ]);
     Menu.setApplicationMenu(devMenu);
@@ -131,6 +136,10 @@ function createWindow() {
   } else {
     Menu.setApplicationMenu(null);
   }
+}
+
+function getMainWindow() {
+  return BrowserWindow.getAllWindows()[0] || null;
 }
 
 ipcMain.handle("launcher:getLastProfile", () => loadProfile());
@@ -166,6 +175,17 @@ ipcMain.handle("launcher:saveConfig", (_, config) => {
   }
 });
 ipcMain.handle("launcher:getInfo", () => appInfo());
+ipcMain.handle("window:toggleFullscreen", () => {
+  const win = getMainWindow();
+  if (!win) return { ok: false, isFullscreen: false };
+  const next = !win.isFullScreen();
+  win.setFullScreen(next);
+  return { ok: true, isFullscreen: win.isFullScreen() };
+});
+ipcMain.handle("window:getFullscreen", () => {
+  const win = getMainWindow();
+  return { ok: true, isFullscreen: win ? win.isFullScreen() : false };
+});
 
 app.whenReady().then(() => {
   createWindow();

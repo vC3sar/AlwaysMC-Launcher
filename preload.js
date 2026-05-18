@@ -7,4 +7,6 @@ contextBridge.exposeInMainWorld("launcherAPI", {
   getConfig: () => ipcRenderer.invoke("launcher:getConfig"),
   saveConfig: (config) => ipcRenderer.invoke("launcher:saveConfig", config),
   getInfo: () => ipcRenderer.invoke("launcher:getInfo"),
+  toggleFullscreen: () => ipcRenderer.invoke("window:toggleFullscreen"),
+  getFullscreen: () => ipcRenderer.invoke("window:getFullscreen"),
 });

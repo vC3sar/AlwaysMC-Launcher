@@ -27,9 +27,7 @@
 
 <body>
     <div id="launcher-overlay" class="launcher-overlay">
-        <video class="launcher-bg-video" autoplay muted loop playsinline>
-            <source src="mp4/menu-main.mp4" type="video/mp4">
-        </video>
+        <video id="launcher-bg-video" class="launcher-bg-video" autoplay muted loop playsinline></video>
         <audio id="launcher-menu-audio" loop>
             <source src="mp3/main-menu.mp3" type="audio/mpeg">
         </audio>
@@ -40,12 +38,14 @@
                 <button type="button" id="menu-play-btn" class="launcher-btn">Jugar (Multijugador)</button>
                 <button type="button" id="menu-config-btn" class="launcher-btn">Configuracion</button>
                 <button type="button" id="menu-info-btn" class="launcher-btn">Informacion</button>
+                <button type="button" id="menu-fullscreen-btn" class="launcher-btn">Pantalla completa (F11)</button>
             </div>
 
             <div id="launcher-play-view" class="launcher-view">
                 <div class="launcher-section-title">Jugar (Multijugador)</div>
                 <div class="launcher-row">
-                    <button type="button" id="continue-last-btn" class="launcher-btn alt">Continuar con la ultima</button>
+                    <button type="button" id="continue-last-btn" class="launcher-btn alt">Continuar con la
+                        ultima</button>
                     <button type="button" id="create-new-btn" class="launcher-btn alt">Crear nueva</button>
                 </div>
                 <div id="new-profile-form" class="launcher-form hidden">
@@ -60,7 +60,48 @@
 
             <div id="launcher-config-view" class="launcher-view">
                 <div class="launcher-section-title">Configuracion (config.json)</div>
-                <textarea id="config-editor" spellcheck="false"></textarea>
+                <div class="launcher-form">
+                    <label for="cfg-client-id">Discord Client ID</label>
+                    <input id="cfg-client-id" type="text" placeholder="your_discord_app_client_id_here">
+
+                    <label for="cfg-preferred-versions">Preferred Versions (Mineflayer)</label>
+                    <select id="cfg-preferred-versions" multiple size="7">
+                        <option value="1.16.5">1.16.5</option>
+                        <option value="1.17.1">1.17.1</option>
+                        <option value="1.18.2">1.18.2</option>
+                        <option value="1.19.4">1.19.4</option>
+                        <option value="1.20.1">1.20.1</option>
+                        <option value="1.20.4">1.20.4</option>
+                        <option value="1.20.6">1.20.6</option>
+                        <option value="1.21">1.21</option>
+                        <option value="1.21.1">1.21.1</option>
+                        <option value="1.21.4">1.21.4</option>
+                        <option value="1.21.8">1.21.8</option>
+                        <option value="1.21.11">1.21.11</option>
+                    </select>
+
+                    <label for="cfg-reconnect-delay">Reconnect Delay (ms)</label>
+                    <input id="cfg-reconnect-delay" type="number" min="0" step="50" placeholder="650">
+
+                    <label class="launcher-check">
+                        <input id="cfg-velocity-compat" type="checkbox">
+                        <span>Velocity Compat Mode</span>
+                    </label>
+
+                    <label class="launcher-check">
+                        <input id="cfg-debug-lifecycle" type="checkbox">
+                        <span>Debug Lifecycle</span>
+                    </label>
+                </div>
+                <div class="launcher-row">
+                    <label for="bg-video-mode-select">Video menu:</label>
+                    <select id="bg-video-mode-select">
+                        <option value="auto">Auto</option>
+                        <option value="1080p">Forzar 1080p</option>
+                        <option value="2k">Forzar 2K</option>
+                        <option value="4k">Forzar 4K</option>
+                    </select>
+                </div>
                 <div class="launcher-row">
                     <button type="button" id="save-config-btn" class="launcher-btn">Guardar config.json</button>
                     <button type="button" id="config-back-btn" class="launcher-link">Volver</button>
@@ -89,7 +130,8 @@
             </div>
             <div class="chat-controls">
                 <input type="text" id="input" placeholder="Escribe y presiona Enter">
-                <button id="inventory-button" type="button" class="btn-inventory-mini" title="Ver inventario" aria-label="Ver inventario">🎒</button>
+                <button id="inventory-button" type="button" class="btn-inventory-mini" title="Ver inventario"
+                    aria-label="Ver inventario">🎒</button>
             </div>
         </div>
 
@@ -177,26 +219,28 @@
         </div>
     </div>
 
-    
+
 
     <div id="action-modal" class="action-modal" aria-hidden="true">
         <div class="action-modal-content">
             <div class="action-modal-header">
                 <span id="action-modal-title" class="action-modal-title">Interactuar con Ítem</span>
-                <button id="action-modal-close-btn" type="button" class="action-modal-close" aria-label="Cerrar modal">✕</button>
+                <button id="action-modal-close-btn" type="button" class="action-modal-close"
+                    aria-label="Cerrar modal">✕</button>
             </div>
             <div class="action-modal-body">
                 <p id="action-modal-text">¿Cómo quieres hacer clic en el objeto?</p>
                 <div class="action-modal-buttons">
                     <button id="action-btn-left" type="button" class="action-btn left">Clic Izquierdo</button>
                     <button id="action-btn-right" type="button" class="action-btn right">Clic Derecho</button>
-                    <button id="action-btn-use" type="button" class="action-btn use" style="grid-column: span 2; margin-top: 4px;">⚡ Usar / Equipar en mano</button>
+                    <button id="action-btn-use" type="button" class="action-btn use"
+                        style="grid-column: span 2; margin-top: 4px;">⚡ Usar / Equipar en mano</button>
                 </div>
             </div>
         </div>
     </div>
 
-<script>
+    <script>
         var launcherAPI = window.launcherAPI || null;
         let ws = null;
         let reconnectSocketTimer = null;
@@ -219,6 +263,8 @@
         const menuCloseBtn = document.getElementById("menu-close-btn");
         const inventoryButton = document.getElementById("inventory-button");
         const launcherOverlay = document.getElementById("launcher-overlay");
+        const launcherBgVideo = document.getElementById("launcher-bg-video");
+        const bgVideoModeSelect = document.getElementById("bg-video-mode-select");
         const launcherMenuAudio = document.getElementById("launcher-menu-audio");
         const launcherStatus = document.getElementById("launcher-status");
         const launcherMainMenu = document.getElementById("launcher-main-menu");
@@ -236,6 +282,51 @@
         let inputHistoryIndex = -1;
         let inputDraft = "";
         const hiddenBaseNames = new Set();
+        let cachedLauncherConfig = {};
+        let currentBgVideoMode = "auto";
+        let currentBgVideoSrc = "";
+
+        const BG_1080_SRC = "mp4/menu-main.mp4";
+        const BG_2K_SRC = "mp4/2k-menu-main.mp4";
+        const BG_4K_SRC = "mp4/4k-menu-main.mp4";
+
+        function chooseBackgroundSource(mode) {
+            if (mode === "1080p") {
+                return BG_1080_SRC;
+            }
+            if (mode === "4k") {
+                return BG_4K_SRC;
+            }
+            if (mode === "2k") {
+                return BG_2K_SRC;
+            }
+
+            const fullScreen = Boolean(document.fullscreenElement) || Boolean(window.matchMedia("(display-mode: fullscreen)").matches);
+            const width = Math.max(window.innerWidth || 0, window.screen?.width || 0);
+            const height = Math.max(window.innerHeight || 0, window.screen?.height || 0);
+            if (fullScreen || width > 2560 || height > 1440) {
+                return BG_4K_SRC;
+            }
+            if (width > 1920 || height > 1080) {
+                return BG_2K_SRC;
+            }
+            return BG_1080_SRC;
+        }
+
+        function applyLauncherBackgroundVideo(mode = currentBgVideoMode) {
+            if (!launcherBgVideo) return;
+            const normalized = ["auto", "1080p", "2k", "4k"].includes(String(mode)) ? String(mode) : "auto";
+            currentBgVideoMode = normalized;
+            const selected = chooseBackgroundSource(normalized);
+            if (selected === currentBgVideoSrc) return;
+
+            currentBgVideoSrc = selected;
+            launcherBgVideo.src = selected;
+            launcherBgVideo.load();
+            launcherBgVideo.play().catch(() => {
+                // Puede requerir interacción del usuario.
+            });
+        }
 
         function sendSocketMessage(payload) {
             if (!ws || ws.readyState !== WebSocket.OPEN) {
@@ -309,6 +400,11 @@
             text = sanitizeVisibleText(text);
             if (!text) {
                 return;
+            }
+
+            if (kind === "player" && !/^[^:]+:\s/.test(text)) {
+                const localUsername = sanitizeVisibleText(document.getElementById("username")?.textContent || "TuUsuario");
+                text = `${localUsername}: ${text}`;
             }
 
             const wasAtBottom = chat.scrollTop + chat.clientHeight >= chat.scrollHeight - 50;
@@ -582,7 +678,7 @@
                     if (!currentMenu) {
                         return;
                     }
-                    
+
                     showActionModal(item, (clickType) => {
                         const menuToken = currentMenu.token;
 
@@ -599,7 +695,7 @@
                             slot: item.slot,
                             clickType: clickType,
                         });
-                        
+
                         const clickName = clickType === "right" ? "derecho" : "izquierdo";
                         appendLine(`[MENU] Click ${clickName} en slot ${item.slot}: ${item.displayName || item.name || "Elemento"}`, "system");
                     });
@@ -729,6 +825,42 @@
             launcherStatus.dataset.kind = isError ? "error" : "ok";
         }
 
+        function loadConfigIntoForm(cfg) {
+            const config = cfg && typeof cfg === "object" ? cfg : {};
+            const launcher = config.launcher && typeof config.launcher === "object" ? config.launcher : {};
+            const versions = Array.isArray(launcher.preferredVersions) ? launcher.preferredVersions : [];
+
+            document.getElementById("cfg-client-id").value = String(config.clientId || "");
+            const versionsSet = new Set(versions.map((v) => String(v).trim()).filter(Boolean));
+            const versionsSelect = document.getElementById("cfg-preferred-versions");
+            if (versionsSelect) {
+                Array.from(versionsSelect.options).forEach((option) => {
+                    option.selected = versionsSet.has(option.value);
+                });
+            }
+            document.getElementById("cfg-reconnect-delay").value = String(launcher.reconnectDelayMs ?? 650);
+            document.getElementById("cfg-velocity-compat").checked = Boolean(launcher.velocityCompatMode);
+            document.getElementById("cfg-debug-lifecycle").checked = Boolean(launcher.debugLifecycle);
+        }
+
+        function buildConfigFromForm() {
+            const versionsSelect = document.getElementById("cfg-preferred-versions");
+            const preferredVersions = versionsSelect
+                ? Array.from(versionsSelect.selectedOptions).map((opt) => String(opt.value).trim()).filter(Boolean)
+                : [];
+
+            return {
+                clientId: String(document.getElementById("cfg-client-id").value || "").trim(),
+                launcher: {
+                    preferredVersions,
+                    velocityCompatMode: Boolean(document.getElementById("cfg-velocity-compat").checked),
+                    debugLifecycle: Boolean(document.getElementById("cfg-debug-lifecycle").checked),
+                    reconnectDelayMs: Number.parseInt(document.getElementById("cfg-reconnect-delay").value || "650", 10) || 650,
+                    menuBackgroundMode: bgVideoModeSelect ? bgVideoModeSelect.value : "auto",
+                },
+            };
+        }
+
         function showLauncherView(view) {
             launcherMainMenu.style.display = view === "main" ? "flex" : "none";
             launcherPlayView.classList.toggle("visible", view === "play");
@@ -741,7 +873,13 @@
             showLauncherView("config");
             if (!launcherAPI) return;
             const cfg = await launcherAPI.getConfig();
-            document.getElementById("config-editor").value = JSON.stringify(cfg || {}, null, 2);
+            cachedLauncherConfig = cfg || {};
+            const configuredMode = String(cfg?.launcher?.menuBackgroundMode || "auto").toLowerCase();
+            currentBgVideoMode = ["auto", "1080p", "2k", "4k"].includes(configuredMode) ? configuredMode : "auto";
+            if (bgVideoModeSelect) {
+                bgVideoModeSelect.value = currentBgVideoMode;
+            }
+            loadConfigIntoForm(cfg || {});
         }
 
         async function openInfoView() {
@@ -759,6 +897,17 @@
                 info.about || "",
             ].join("\n");
             document.getElementById("info-content").textContent = text;
+        }
+
+        async function toggleFullscreenMode() {
+            if (!launcherAPI || typeof launcherAPI.toggleFullscreen !== "function") {
+                return;
+            }
+            const state = await launcherAPI.toggleFullscreen();
+            const fullscreenBtn = document.getElementById("menu-fullscreen-btn");
+            if (fullscreenBtn && state?.ok) {
+                fullscreenBtn.textContent = state.isFullscreen ? "Salir de pantalla completa (F11)" : "Pantalla completa (F11)";
+            }
         }
 
         async function bootContinue() {
@@ -819,6 +968,7 @@
             });
             bindClick("menu-config-btn", openConfigView);
             bindClick("menu-info-btn", openInfoView);
+            bindClick("menu-fullscreen-btn", toggleFullscreenMode);
             bindClick("play-back-btn", () => showLauncherView("main"));
             bindClick("config-back-btn", () => showLauncherView("main"));
             bindClick("info-back-btn", () => showLauncherView("main"));
@@ -830,18 +980,36 @@
             bindClick("save-config-btn", async () => {
                 if (!launcherAPI) return;
                 try {
-                    const parsed = JSON.parse(document.getElementById("config-editor").value);
+                    const parsed = buildConfigFromForm();
                     const result = await launcherAPI.saveConfig(parsed);
                     if (!result?.ok) {
                         setLauncherStatus(result?.error || "No se pudo guardar.", true);
                         return;
                     }
+                    cachedLauncherConfig = parsed;
+                    currentBgVideoMode = String(parsed.launcher.menuBackgroundMode || "auto").toLowerCase();
+                    applyLauncherBackgroundVideo(currentBgVideoMode);
                     setLauncherStatus("config.json guardado.");
                 } catch {
                     setLauncherStatus("JSON invalido en configuracion.", true);
                 }
             });
+
+            if (bgVideoModeSelect) {
+                bgVideoModeSelect.addEventListener("change", () => {
+                    applyLauncherBackgroundVideo(bgVideoModeSelect.value);
+                });
+            }
             showLauncherView("main");
+
+            if (launcherAPI && typeof launcherAPI.getFullscreen === "function") {
+                launcherAPI.getFullscreen().then((state) => {
+                    const fullscreenBtn = document.getElementById("menu-fullscreen-btn");
+                    if (fullscreenBtn && state?.ok) {
+                        fullscreenBtn.textContent = state.isFullscreen ? "Salir de pantalla completa (F11)" : "Pantalla completa (F11)";
+                    }
+                }).catch(() => {});
+            }
         }
 
         try {
@@ -863,6 +1031,47 @@
             document.addEventListener("click", tryPlayMenuAudio, { once: true });
             document.addEventListener("keydown", tryPlayMenuAudio, { once: true });
         }
+
+        if (launcherAPI) {
+            launcherAPI.getConfig().then((cfg) => {
+                cachedLauncherConfig = cfg || {};
+                const mode = String(cfg?.launcher?.menuBackgroundMode || "auto").toLowerCase();
+                currentBgVideoMode = ["auto", "1080p", "2k", "4k"].includes(mode) ? mode : "auto";
+                if (bgVideoModeSelect) {
+                    bgVideoModeSelect.value = currentBgVideoMode;
+                }
+                applyLauncherBackgroundVideo(currentBgVideoMode);
+            }).catch(() => {
+                applyLauncherBackgroundVideo("auto");
+            });
+        } else {
+            applyLauncherBackgroundVideo("auto");
+        }
+
+        if (launcherBgVideo) {
+            launcherBgVideo.addEventListener("loadedmetadata", () => {
+                console.log(
+                    `[Launcher Video] source=${launcherBgVideo.videoWidth}x${launcherBgVideo.videoHeight} viewport=${window.innerWidth}x${window.innerHeight}`
+                );
+            });
+            window.addEventListener("resize", () => {
+                if (currentBgVideoMode === "auto") {
+                    applyLauncherBackgroundVideo("auto");
+                }
+            });
+            document.addEventListener("fullscreenchange", () => {
+                if (currentBgVideoMode === "auto") {
+                    applyLauncherBackgroundVideo("auto");
+                }
+            });
+        }
+
+        document.addEventListener("keydown", (event) => {
+            if (event.key === "F11") {
+                event.preventDefault();
+                toggleFullscreenMode();
+            }
+        });
 
         menuSearch.addEventListener("input", () => {
             menuQuery = menuSearch.value || "";
@@ -914,7 +1123,7 @@
         const actionBtnLeft = document.getElementById("action-btn-left");
         const actionBtnRight = document.getElementById("action-btn-right");
         const actionBtnUse = document.getElementById("action-btn-use");
-        
+
         let onActionSelected = null;
 
         function showActionModal(item, callback) {
@@ -932,7 +1141,7 @@
         }
 
         actionModalCloseBtn.addEventListener("click", hideActionModal);
-        
+
         actionBtnLeft.addEventListener("click", () => {
             if (typeof onActionSelected === "function") {
                 onActionSelected("left");
