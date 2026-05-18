@@ -3,6 +3,11 @@ const readline = require("readline");
 const WebSocket = require("ws");
 const ping = require("ping");
 const nbt = require("prismarine-nbt");
+const { createRuntimeState } = require("./src/bot/state");
+const { extractVitals } = require("./src/bot/vitals");
+const { getArmorDestination, isLikelyFood } = require("./src/bot/menu");
+const { sanitizeVisibleText: sanitizeVisibleTextShared } = require("./src/bot/minecraft-text");
+const { createWSServerConfig } = require("./src/bot/ws-server");
 const { words: ignoredMessages } = require("./config/ignore.json");
 const { setPresence } = require("./fn/discord");
 const appConfig = require("./config.json");
@@ -68,12 +73,13 @@ module.exports = function (profile) {
   let menuTransitionLocked = false;
   let menuTransitionTimer = null;
   let ChatMessage = null;
-  let botReady = false;
-  let botStatus = "offline";
-  let reconnectInProgress = false;
+  const runtimeState = createRuntimeState();
+  let botReady = runtimeState.botReady;
+  let botStatus = runtimeState.botStatus;
+  let reconnectInProgress = runtimeState.reconnectInProgress;
   let reconnectTimer = null;
-  let currentHealth = null;
-  let currentFood = null;
+  let currentHealth = runtimeState.currentHealth;
+  let currentFood = runtimeState.currentFood;
   const pendingOutboundMessages = [];
   const DEDUPE_WINDOW_MS = 750;
   const CHAT_HISTORY_LIMIT = 300;
@@ -123,9 +129,7 @@ module.exports = function (profile) {
   }
 
   function normalizeChatKey(text) {
-    return String(text ?? "")
-      .trim()
-      .toLowerCase();
+    return String(text ?? "").trim().toLowerCase();
   }
 
   function prunePendingOutboundEchoes() {
@@ -207,15 +211,14 @@ module.exports = function (profile) {
     });
   }
 
-  function extractVitals() {
-    const healthValue = Number(bot?.health);
-    const foodValue = Number(bot?.food);
-    currentHealth = Number.isFinite(healthValue) ? Math.max(0, Math.min(20, Math.round(healthValue))) : null;
-    currentFood = Number.isFinite(foodValue) ? Math.max(0, Math.min(20, Math.round(foodValue))) : null;
+  function refreshVitalsFromBot() {
+    const vitals = extractVitals(bot);
+    currentHealth = vitals.health;
+    currentFood = vitals.food;
   }
 
   function broadcastVitals() {
-    extractVitals();
+    refreshVitalsFromBot();
     broadcast({
       type: "vitals",
       health: currentHealth,
@@ -375,11 +378,7 @@ module.exports = function (profile) {
   }
 
   function sanitizeVisibleText(input) {
-    return String(input ?? "")
-      .replace(/\uFFFD+/g, "")
-      .replace(/[\u0000-\u001F\u007F]/g, " ")
-      .replace(/\s+/g, " ")
-      .trim();
+    return sanitizeVisibleTextShared(input);
   }
 
   function simplifyNbt(tag) {
@@ -572,51 +571,6 @@ module.exports = function (profile) {
       searchText: sanitizeVisibleText(searchText),
       count: item.count || 1,
     };
-  }
-
-  function getArmorDestination(itemName) {
-    const normalized = String(itemName || "").toLowerCase();
-    if (!normalized) return null;
-    if (normalized.includes("helmet") || normalized.includes("skull") || normalized.includes("head")) return "head";
-    if (normalized.includes("chestplate") || normalized.includes("elytra")) return "torso";
-    if (normalized.includes("leggings")) return "legs";
-    if (normalized.includes("boots")) return "feet";
-    return null;
-  }
-
-  function isLikelyFood(itemName) {
-    const normalized = String(itemName || "").toLowerCase();
-    if (!normalized) return false;
-
-    const foodTokens = [
-      "apple",
-      "bread",
-      "beef",
-      "chicken",
-      "cod",
-      "salmon",
-      "mutton",
-      "porkchop",
-      "rabbit",
-      "potato",
-      "carrot",
-      "beetroot",
-      "cookie",
-      "melon_slice",
-      "sweet_berries",
-      "glow_berries",
-      "golden_apple",
-      "enchanted_golden_apple",
-      "stew",
-      "soup",
-      "pumpkin_pie",
-      "chorus_fruit",
-      "dried_kelp",
-      "honey_bottle",
-      "rotten_flesh",
-    ];
-
-    return foodTokens.some((token) => normalized.includes(token));
   }
 
   function sendInventorySnapshot(ws, tokenOverride = null) {
@@ -816,7 +770,8 @@ module.exports = function (profile) {
   });
 
   // WebSocket local para el panel Electron (sin servir UI por HTTP)
-  const wss = new WebSocket.Server({ port: 3000 });
+  const wsConfig = createWSServerConfig();
+  const wss = new WebSocket.Server({ port: wsConfig.port });
   wss.on("listening", () => {
     console.log("🔌 WebSocket local del panel en ws://127.0.0.1:3000");
   });
@@ -1056,7 +1011,7 @@ module.exports = function (profile) {
       setMenuTransitionLocked(false);
       setPresence(`${ip} - ${getActiveVersion()}`);
       currentBot.settings.chat = "enabled";
-      extractVitals();
+      refreshVitalsFromBot();
       broadcastSidebarState("online");
       broadcastVitals();
       console.log(`✅ Conectado como ${currentBot.username}`);

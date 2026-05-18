@@ -1,0 +1,2 @@
+/* Launcher-only styles (overrides/extensions) */
+body.launcher-page .launcher-overlay { display: flex; }

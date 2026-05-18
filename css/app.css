@@ -1,0 +1,2 @@
+/* App-only styles (overrides/extensions) */
+body.app-page .launcher-overlay { display: none !important; }
