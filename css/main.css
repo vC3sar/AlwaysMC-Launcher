@@ -96,6 +96,15 @@ body {
     display: none;
 }
 
+#launcher-config-view {
+    width: 100%;
+    max-height: min(68vh, 720px);
+    overflow-y: auto;
+    overflow-x: hidden;
+    padding-right: 6px;
+    box-sizing: border-box;
+}
+
 .launcher-btn,
 .launcher-link {
     border: 1px solid rgba(200, 146, 106, 0.35);

@@ -18,7 +18,13 @@ module.exports = function (profile) {
   const sessionId = `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
   const launcherConfig = appConfig && typeof appConfig.launcher === "object" ? appConfig.launcher : {};
   const reconnectDelayMs = Number.parseInt(launcherConfig.reconnectDelayMs || "650", 10) || 650;
+  const authRecoveryWindowMs = Number.parseInt(launcherConfig.authRecoveryWindowMs || "30000", 10) || 30000;
+  const maxReconnectAttempts = Number.parseInt(launcherConfig.maxReconnectAttempts || "6", 10) || 6;
+  const reconnectBackoffMaxMs = Number.parseInt(launcherConfig.reconnectBackoffMaxMs || "4000", 10) || 4000;
+  const reconnectJitterRatio = Number.parseFloat(launcherConfig.reconnectJitterRatio || "0.2") || 0.2;
   const velocityCompatMode = Boolean(launcherConfig.velocityCompatMode);
+  const verboseMode = String(launcherConfig.verboseMode || "app").toLowerCase() === "all" ? "all" : "app";
+  const verboseTrafficLogs = verboseMode === "all";
   const versionCandidates = Array.from(
     new Set(
       [
@@ -78,6 +84,11 @@ module.exports = function (profile) {
   let botStatus = runtimeState.botStatus;
   let reconnectInProgress = runtimeState.reconnectInProgress;
   let reconnectTimer = null;
+  let reconnectAttempt = 0;
+  let stableSessionTimer = null;
+  let spawnAt = 0;
+  let lastAuthCommandAt = 0;
+  let lastStableAt = 0;
   let currentHealth = runtimeState.currentHealth;
   let currentFood = runtimeState.currentFood;
   const pendingOutboundMessages = [];
@@ -231,6 +242,127 @@ module.exports = function (profile) {
       clearTimeout(reconnectTimer);
       reconnectTimer = null;
     }
+    if (stableSessionTimer) {
+      clearTimeout(stableSessionTimer);
+      stableSessionTimer = null;
+    }
+  }
+
+  function computeReconnectDelay(attempt) {
+    const base = Math.max(250, reconnectDelayMs);
+    const exp = Math.min(Math.max(1, attempt), 12) - 1;
+    const capped = Math.min(reconnectBackoffMaxMs, Math.round(base * (2 ** exp)));
+    const jitter = Math.round(capped * reconnectJitterRatio * (Math.random() * 2 - 1));
+    return Math.max(200, capped + jitter);
+  }
+
+  function markAuthCommandIfNeeded(text) {
+    const line = String(text || "").trim().toLowerCase();
+    if (!line) return;
+    if (line.startsWith("/login")) {
+      lastAuthCommandAt = Date.now();
+      debugLog("auth:command", `captured=${line}`);
+    }
+  }
+
+  function classifyDisconnectEvent({ eventType, reasonText, loggedIn, wasReady }) {
+    const now = Date.now();
+    const normalizedReason = String(reasonText || "").toLowerCase();
+    const sinceSpawn = spawnAt > 0 ? now - spawnAt : Number.POSITIVE_INFINITY;
+    const sinceAuth = lastAuthCommandAt > 0 ? now - lastAuthCommandAt : Number.POSITIVE_INFINITY;
+
+    if (!wasReady || loggedIn === false) {
+      return { reasonType: "pre_spawn_transient", phase: "pre-spawn", sinceSpawn, sinceAuth };
+    }
+
+    const looksProxyInternal =
+      normalizedReason.includes("internal error occurred in your connection") ||
+      normalizedReason.includes("proxy") ||
+      normalizedReason.includes("velocity");
+
+    if (sinceAuth <= authRecoveryWindowMs || sinceSpawn <= authRecoveryWindowMs || looksProxyInternal) {
+      return { reasonType: "post_auth_transient", phase: "post-auth", sinceSpawn, sinceAuth };
+    }
+
+    return { reasonType: "fatal", phase: eventType, sinceSpawn, sinceAuth };
+  }
+
+  function finishReconnectCycle({ fatal = false, message = "" } = {}) {
+    reconnectInProgress = false;
+    if (fatal) {
+      reconnectAttempt = 0;
+    }
+    broadcast({
+      type: "reconnectState",
+      busy: false,
+      message: message || "",
+      attempt: reconnectAttempt,
+      maxAttempts: maxReconnectAttempts,
+      reasonType: fatal ? "fatal" : "recovered",
+    });
+  }
+
+  function scheduleAdaptiveReconnect({ reasonType, phase, reasonText, resetVersionCycle = false }) {
+    if (!velocityCompatMode) {
+      return false;
+    }
+
+    if (reconnectInProgress) {
+      debugLog("reconnect:ignored", `already in progress reasonType=${reasonType}`);
+      return true;
+    }
+
+    if (reconnectAttempt >= maxReconnectAttempts) {
+      debugLog("reconnect:exhausted", `reasonType=${reasonType} attempts=${reconnectAttempt}`);
+      broadcastSidebarState("offline");
+      finishReconnectCycle({
+        fatal: true,
+        message: "No se pudo reconectar al proxy tras varios intentos.",
+      });
+      return true;
+    }
+
+    reconnectAttempt += 1;
+    const delayMs = computeReconnectDelay(reconnectAttempt);
+    const uptimeSinceSpawn = spawnAt > 0 ? Date.now() - spawnAt : -1;
+
+    debugLog(
+      "reconnect:schedule",
+      `reasonType=${reasonType} phase=${phase} attempt=${reconnectAttempt}/${maxReconnectAttempts} delayMs=${delayMs} uptimeSinceSpawn=${uptimeSinceSpawn}`
+    );
+
+    requestLocalRestart({
+      resetVersionCycle,
+      delayMs,
+      reasonType,
+      reasonText,
+      attempt: reconnectAttempt,
+      maxAttempts: maxReconnectAttempts,
+      showOffline: false,
+    });
+    return true;
+  }
+
+  function handleDisconnectEvent(eventType, { reasonText = "", loggedIn = null } = {}) {
+    const wasReady = botReady;
+    const classification = classifyDisconnectEvent({ eventType, reasonText, loggedIn, wasReady });
+    const details = `reasonType=${classification.reasonType} phase=${classification.phase} sinceSpawn=${classification.sinceSpawn} sinceAuth=${classification.sinceAuth}`;
+    debugLog(`disconnect:${eventType}`, details);
+
+    if (classification.reasonType === "pre_spawn_transient" && scheduleVersionRetry(`${eventType}-before-spawn`)) {
+      return true;
+    }
+
+    if (classification.reasonType === "pre_spawn_transient" || classification.reasonType === "post_auth_transient") {
+      return scheduleAdaptiveReconnect({
+        reasonType: classification.reasonType,
+        phase: classification.phase,
+        reasonText,
+        resetVersionCycle: false,
+      });
+    }
+
+    return false;
   }
 
   function createBotInstance() {
@@ -255,7 +387,15 @@ module.exports = function (profile) {
     return bot;
   }
 
-  function requestLocalRestart({ resetVersionCycle = false } = {}) {
+  function requestLocalRestart({
+    resetVersionCycle = false,
+    delayMs = reconnectDelayMs,
+    reasonType = "manual",
+    reasonText = "",
+    attempt = reconnectAttempt,
+    maxAttempts = maxReconnectAttempts,
+    showOffline = false,
+  } = {}) {
     if (reconnectInProgress) {
       debugLog("reconnect:ignored", "already in progress");
       return;
@@ -267,11 +407,19 @@ module.exports = function (profile) {
 
     reconnectInProgress = true;
     debugLog("reconnect:start", "recreating bot inside current process");
-    broadcastSidebarState("reconnecting");
+    if (showOffline) {
+      broadcastSidebarState("offline");
+    } else {
+      broadcastSidebarState("reconnecting");
+    }
     broadcast({
       type: "reconnectState",
       busy: true,
-      message: "Reconectando al servidor...",
+      message: "Reintentando conexión con proxy...",
+      attempt,
+      maxAttempts,
+      reasonType,
+      reasonText: sanitizeVisibleText(reasonText),
     });
 
     clearReconnectTimer();
@@ -290,7 +438,7 @@ module.exports = function (profile) {
         });
         console.log("❌ Error al recrear el bot:", error);
       }
-    }, reconnectDelayMs);
+    }, delayMs);
   }
 
   function scheduleVersionRetry(reason) {
@@ -493,8 +641,10 @@ module.exports = function (profile) {
       return;
     }
 
-    const prefix = source === "player" ? "[CHAT]" : "[SERVER]";
-    console.log(`${prefix} ${line}`);
+    if (verboseTrafficLogs) {
+      const prefix = source === "player" ? "[CHAT]" : source === "system" ? "[SYSTEM]" : "[SERVER]";
+      console.log(`${prefix} ${line}`);
+    }
     pushChatHistory({ text: line, source });
     broadcast({ type: "chat", text: line, source });
   }
@@ -504,9 +654,12 @@ module.exports = function (profile) {
     if (!line || isIgnored(line)) {
       return;
     }
+    markAuthCommandIfNeeded(line);
 
     markOutboundEcho(line);
-    console.log(`[CHAT:${origin}] ${line}`);
+    if (verboseTrafficLogs) {
+      console.log(`[CHAT:${origin}] ${line}`);
+    }
 
     if (!botReady) {
       pendingOutboundMessages.push(line);
@@ -1006,6 +1159,7 @@ module.exports = function (profile) {
       debugLog("bot:spawn", `username=${currentBot.username}`);
       botReady = true;
       reconnectInProgress = false;
+      spawnAt = Date.now();
       clearReconnectTimer();
       menuTransitionLocked = false;
       setMenuTransitionLocked(false);
@@ -1014,12 +1168,25 @@ module.exports = function (profile) {
       refreshVitalsFromBot();
       broadcastSidebarState("online");
       broadcastVitals();
+      broadcast({
+        type: "reconnectState",
+        busy: false,
+        message: "",
+        attempt: reconnectAttempt,
+        maxAttempts: maxReconnectAttempts,
+        reasonType: "recovered",
+      });
       console.log(`✅ Conectado como ${currentBot.username}`);
       emitChatLine(`✅ Conectado como ${currentBot.username}`, "system");
       flushPendingOutboundMessages();
       setTimeout(() => {
         //currentBot.chat("/modalidades");
       }, 5000);
+      stableSessionTimer = setTimeout(() => {
+        reconnectAttempt = 0;
+        lastStableAt = Date.now();
+        debugLog("session:stable", `at=${lastStableAt}`);
+      }, 12000);
     });
 
     currentBot.once("login", () => {
@@ -1061,24 +1228,28 @@ module.exports = function (profile) {
 
     // MANAGE DISCONNECTIONS & ERRORS
     currentBot.on("kicked", (reason, loggedIn) => {
+      const decodedReason = decodeMinecraftText(reason);
       debugLog(
         "bot:kicked",
-        `loggedIn=${loggedIn} reason=${decodeMinecraftText(reason) || "unknown"}`
+        `loggedIn=${loggedIn} reason=${decodedReason || "unknown"}`
       );
       menuTransitionLocked = false;
       setMenuTransitionLocked(false);
       detachWindowRealtime();
       botReady = false;
       pendingOutboundMessages.length = 0;
-      broadcastSidebarState("offline");
-      reconnectInProgress = false;
+      currentHealth = null;
+      currentFood = null;
       clearReconnectTimer();
-      if (loggedIn === false && scheduleVersionRetry("kicked-before-spawn")) {
+      if (handleDisconnectEvent("kicked", { reasonText: decodedReason, loggedIn })) {
         return;
       }
+      reconnectInProgress = false;
+      broadcastSidebarState("offline");
+      finishReconnectCycle({ fatal: true, message: "Conexión cerrada por el servidor." });
       console.log(
         "❌ Kicked:",
-        sanitizeVisibleText(decodeMinecraftText(reason)),
+        sanitizeVisibleText(decodedReason),
         sanitizeVisibleText(JSON.stringify(reason)),
         "(loggedIn:",
         loggedIn,
@@ -1088,17 +1259,17 @@ module.exports = function (profile) {
 
     currentBot.on("disconnect", (reason) => {
       debugLog("bot:disconnect", `reason=${String(reason || "unknown")}`);
-      const wasReady = botReady;
       botReady = false;
       pendingOutboundMessages.length = 0;
       currentHealth = null;
       currentFood = null;
-      broadcastSidebarState("offline");
-      reconnectInProgress = false;
       clearReconnectTimer();
-      if (!wasReady && scheduleVersionRetry("disconnect-before-spawn")) {
+      if (handleDisconnectEvent("disconnect", { reasonText: String(reason || "unknown") })) {
         return;
       }
+      reconnectInProgress = false;
+      broadcastSidebarState("offline");
+      finishReconnectCycle({ fatal: true, message: "Sesión desconectada." });
       console.log(`🔌 Session closed: ${sanitizeVisibleText(reason)}`);
     });
 
@@ -1112,17 +1283,17 @@ module.exports = function (profile) {
 
     currentBot.on("end", () => {
       debugLog("bot:end", "connection ended");
-      const wasReady = botReady;
       botReady = false;
       pendingOutboundMessages.length = 0;
       currentHealth = null;
       currentFood = null;
-      broadcastSidebarState("offline");
-      reconnectInProgress = false;
       clearReconnectTimer();
-      if (!wasReady && scheduleVersionRetry("end-before-spawn")) {
+      if (handleDisconnectEvent("end", { reasonText: "connection ended" })) {
         return;
       }
+      reconnectInProgress = false;
+      broadcastSidebarState("offline");
+      finishReconnectCycle({ fatal: true, message: "Conexión finalizada." });
       console.log("🔌 Disconnected from the server");
     });
 

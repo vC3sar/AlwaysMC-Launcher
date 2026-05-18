@@ -1,272 +1,107 @@
 <!DOCTYPE html>
 <html lang="es">
-
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Chat del Bot</title>
-    <link rel="stylesheet" href="css/shared.css">
-    <link rel="stylesheet" href="css/main.css">
-    <link rel="stylesheet" href="css/launcher.css">
-    <style>
-        html,
-        body {
-            overflow-x: hidden;
-            overflow-y: auto;
-        }
-
-        body {
-            min-height: 100vh;
-            height: auto;
-            visibility: hidden;
-        }
-
-        #container {
-            min-height: 100vh;
-            height: auto;
-        }
-    </style>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>MC-BETA</title>
+  <link rel="stylesheet" href="css/shared.css">
+  <link rel="stylesheet" href="css/main.css">
+  <link rel="stylesheet" href="css/launcher.css">
+  <style>
+    html, body { overflow-x: hidden; overflow-y: auto; }
+    body { min-height: 100vh; height: auto; visibility: hidden; }
+  </style>
 </head>
-
 <body class="launcher-page">
-    <div id="launcher-overlay" class="launcher-overlay">
-        <video id="launcher-bg-video" class="launcher-bg-video" autoplay muted loop playsinline></video>
-        <audio id="launcher-menu-audio" loop>
-            <source src="mp3/main-menu.mp3" type="audio/mpeg">
-        </audio>
-        <button id="launcher-audio-toggle" class="launcher-audio-toggle" type="button" aria-label="Silenciar música" title="Silenciar música">
-            <i data-lucide="volume-2"></i>
-        </button>
-        <div class="launcher-shell">
-            <div class="launcher-brand">MC-BETA</div>
-            <div class="launcher-sub">Modo Electron</div>
-            <div class="launcher-menu" id="launcher-main-menu">
-                <button type="button" id="menu-play-btn" class="launcher-btn">Jugar (Multijugador)</button>
-                <button type="button" id="menu-config-btn" class="launcher-btn">Configuracion</button>
-                <button type="button" id="menu-info-btn" class="launcher-btn">Informacion</button>
-                <button type="button" id="menu-fullscreen-btn" class="launcher-btn">Pantalla completa (F11)</button>
-            </div>
+  <div id="launcher-overlay" class="launcher-overlay">
+    <video id="launcher-bg-video" class="launcher-bg-video" autoplay muted loop playsinline></video>
+    <audio id="launcher-menu-audio" loop>
+      <source src="mp3/main-menu.mp3" type="audio/mpeg">
+    </audio>
+    <button id="launcher-audio-toggle" class="launcher-audio-toggle" type="button" aria-label="Silenciar música" title="Silenciar música">
+      <i data-lucide="volume-2"></i>
+    </button>
 
-            <div id="launcher-play-view" class="launcher-view">
-                <div class="launcher-section-title">Jugar (Multijugador)</div>
-                <div class="launcher-row">
-                    <button type="button" id="continue-last-btn" class="launcher-btn alt">Continuar con la
-                        ultima</button>
-                    <button type="button" id="create-new-btn" class="launcher-btn alt">Crear nueva</button>
-                </div>
-                <div id="new-profile-form" class="launcher-form hidden">
-                    <input id="new-username" type="text" placeholder="Nickname offline/no premium">
-                    <input id="new-ip" type="text" placeholder="IP (ej: mc.haliacraft.com)">
-                    <input id="new-port" type="number" placeholder="Puerto (25565)">
-                    <input id="new-version" type="text" placeholder="Version (ej: 1.21.11)">
-                    <button type="button" id="start-new-profile-btn" class="launcher-btn">Iniciar nueva partida</button>
-                </div>
-                <button type="button" id="play-back-btn" class="launcher-link">Volver</button>
-            </div>
+    <div class="launcher-shell">
+      <div class="launcher-brand">MC-BETA</div>
+      <div class="launcher-sub">Esto nunca termina...</div>
 
-            <div id="launcher-config-view" class="launcher-view">
-                <div class="launcher-section-title">Configuracion (config.json)</div>
-                <div class="launcher-form">
-                    <label for="cfg-client-id">Discord Client ID</label>
-                    <input id="cfg-client-id" type="text" placeholder="your_discord_app_client_id_here">
+      <div class="launcher-menu" id="launcher-main-menu">
+        <button type="button" id="menu-play-btn" class="launcher-btn">Jugar (Multijugador)</button>
+        <button type="button" id="menu-config-btn" class="launcher-btn">Configuracion</button>
+        <button type="button" id="menu-info-btn" class="launcher-btn">Informacion</button>
+        <button type="button" id="menu-fullscreen-btn" class="launcher-btn">Pantalla completa (F11)</button>
+      </div>
 
-                    <label for="cfg-preferred-versions">Preferred Versions (Mineflayer)</label>
-                    <select id="cfg-preferred-versions" multiple size="7">
-                        <option value="1.16.5">1.16.5</option>
-                        <option value="1.17.1">1.17.1</option>
-                        <option value="1.18.2">1.18.2</option>
-                        <option value="1.19.4">1.19.4</option>
-                        <option value="1.20.1">1.20.1</option>
-                        <option value="1.20.4">1.20.4</option>
-                        <option value="1.20.6">1.20.6</option>
-                        <option value="1.21">1.21</option>
-                        <option value="1.21.1">1.21.1</option>
-                        <option value="1.21.4">1.21.4</option>
-                        <option value="1.21.8">1.21.8</option>
-                        <option value="1.21.11">1.21.11</option>
-                    </select>
-
-                    <label for="cfg-reconnect-delay">Reconnect Delay (ms)</label>
-                    <input id="cfg-reconnect-delay" type="number" min="0" step="50" placeholder="650">
-
-                    <label class="launcher-check">
-                        <input id="cfg-velocity-compat" type="checkbox">
-                        <span>Velocity Compat Mode</span>
-                    </label>
-
-                    <label class="launcher-check">
-                        <input id="cfg-debug-lifecycle" type="checkbox">
-                        <span>Debug Lifecycle</span>
-                    </label>
-                </div>
-                <div class="launcher-row">
-                    <label for="bg-video-mode-select">Video menu:</label>
-                    <select id="bg-video-mode-select">
-                        <option value="auto">Auto</option>
-                        <option value="1080p">Forzar 1080p</option>
-                        <option value="2k">Forzar 2K</option>
-                        <option value="4k">Forzar 4K</option>
-                    </select>
-                </div>
-                <div class="launcher-row">
-                    <button type="button" id="save-config-btn" class="launcher-btn">Guardar config.json</button>
-                    <button type="button" id="config-back-btn" class="launcher-link">Volver</button>
-                </div>
-            </div>
-
-            <div id="launcher-info-view" class="launcher-view">
-                <div class="launcher-section-title">Informacion</div>
-                <pre id="info-content"></pre>
-                <button type="button" id="info-back-btn" class="launcher-link">Volver</button>
-            </div>
-
-            <div id="launcher-status" class="launcher-status"></div>
+      <div id="launcher-play-view" class="launcher-view">
+        <div class="launcher-section-title">Jugar (Multijugador)</div>
+        <div class="launcher-row">
+          <button type="button" id="continue-last-btn" class="launcher-btn alt">Continuar con la ultima</button>
+          <button type="button" id="create-new-btn" class="launcher-btn alt">Crear nueva</button>
         </div>
+        <div id="new-profile-form" class="launcher-form hidden">
+          <input id="new-username" type="text" placeholder="Nickname offline/no premium">
+          <input id="new-ip" type="text" placeholder="IP (ej: mc.haliacraft.com)">
+          <input id="new-port" type="number" placeholder="Puerto (25565)">
+          <input id="new-version" type="text" placeholder="Version (ej: 1.21.11)">
+          <button type="button" id="start-new-profile-btn" class="launcher-btn">Iniciar nueva partida</button>
+        </div>
+        <button type="button" id="play-back-btn" class="launcher-link">Volver</button>
+      </div>
+
+      <div id="launcher-config-view" class="launcher-view">
+        <div class="launcher-section-title">Configuracion (config.json)</div>
+        <div class="launcher-form">
+          <label for="cfg-client-id">Discord Client ID</label>
+          <input id="cfg-client-id" type="text" placeholder="your_discord_app_client_id_here">
+
+          <label for="cfg-preferred-versions">Preferred Versions (Mineflayer)</label>
+          <select id="cfg-preferred-versions" multiple size="7">
+            <option value="1.16.5">1.16.5</option><option value="1.17.1">1.17.1</option><option value="1.18.2">1.18.2</option>
+            <option value="1.19.4">1.19.4</option><option value="1.20.1">1.20.1</option><option value="1.20.4">1.20.4</option>
+            <option value="1.20.6">1.20.6</option><option value="1.21">1.21</option><option value="1.21.1">1.21.1</option>
+            <option value="1.21.4">1.21.4</option><option value="1.21.8">1.21.8</option><option value="1.21.11">1.21.11</option>
+          </select>
+
+          <label for="cfg-reconnect-delay">Reconnect Delay (ms)</label>
+          <input id="cfg-reconnect-delay" type="number" min="0" step="50" placeholder="650">
+          <label for="cfg-auth-recovery-window">Auth Recovery Window (ms)</label>
+          <input id="cfg-auth-recovery-window" type="number" min="1000" step="500" placeholder="30000">
+          <label for="cfg-max-reconnect-attempts">Max Reconnect Attempts</label>
+          <input id="cfg-max-reconnect-attempts" type="number" min="1" step="1" placeholder="6">
+          <label for="cfg-reconnect-backoff-max">Reconnect Backoff Max (ms)</label>
+          <input id="cfg-reconnect-backoff-max" type="number" min="500" step="250" placeholder="4000">
+          <label for="cfg-reconnect-jitter">Reconnect Jitter Ratio</label>
+          <input id="cfg-reconnect-jitter" type="number" min="0" max="1" step="0.05" placeholder="0.2">
+
+          <label class="launcher-check"><input id="cfg-velocity-compat" type="checkbox"><span>Velocity Compat Mode</span></label>
+          <label class="launcher-check"><input id="cfg-debug-lifecycle" type="checkbox"><span>Debug Lifecycle</span></label>
+
+          <label for="cfg-verbose-mode">Verbose (solo consola Electron)</label>
+          <select id="cfg-verbose-mode"><option value="app">Solo logs de app</option><option value="all">App + bot/server/chat/system</option></select>
+        </div>
+        <div class="launcher-row">
+          <label for="bg-video-mode-select">Video menu:</label>
+          <select id="bg-video-mode-select"><option value="auto">Auto</option><option value="1080p">Forzar 1080p</option><option value="2k">Forzar 2K</option><option value="4k">Forzar 4K</option></select>
+        </div>
+        <div class="launcher-row">
+          <button type="button" id="save-config-btn" class="launcher-btn">Guardar config.json</button>
+          <button type="button" id="config-back-btn" class="launcher-link">Volver</button>
+        </div>
+      </div>
+
+      <div id="launcher-info-view" class="launcher-view">
+        <div class="launcher-section-title">Informacion</div>
+        <pre id="info-content"></pre>
+        <button type="button" id="info-back-btn" class="launcher-link">Volver</button>
+      </div>
+
+      <div id="launcher-status" class="launcher-status"></div>
     </div>
-    <div id="container">
-        <!-- Columna izquierda: Chat -->
-        <div id="chat-section">
-            <div id="vitals-hud" class="vitals-hud">
-                <div class="vital-card">
-                    <span class="vital-icon" aria-hidden="true">❤️</span>
-                    <span class="vital-label">Vida</span>
-                    <span class="vital-value" id="hud-health">--/20</span>
-                </div>
-                <div class="vital-card">
-                    <span class="vital-icon" aria-hidden="true">🍗</span>
-                    <span class="vital-label">Comida</span>
-                    <span class="vital-value" id="hud-food">--/20</span>
-                </div>
-            </div>
-            <div id="chat" style="overflow-wrap: anywhere;"></div>
-            <div id="reconnect-panel">
-                <div class="reconnect-copy">
-                    <div class="reconnect-title">Bot desconectado</div>
-                    <div class="reconnect-subtitle">Puedes reiniciar la conexión sin recargar la página.</div>
-                </div>
-                <button id="reconnect-button" type="button">Reconectar</button>
-            </div>
-            <div class="chat-controls">
-                <input type="text" id="input" placeholder="Escribe y presiona Enter">
-                <button id="inventory-button" type="button" class="btn-inventory-mini" title="Ver inventario"
-                    aria-label="Ver inventario">🎒</button>
-            </div>
-        </div>
+  </div>
 
-        <!-- Columna derecha: Info -->
-        <div id="sidebar">
-            <div class="card sidebar-hero">
-                <div class="sidebar-kicker" data-status="offline">Panel en vivo</div>
-                <h2>Información</h2>
-                <p>Estado de la sesión, jugador y servidor con lectura rápida.</p>
-                <div class="sidebar-meta">
-                    <span class="sidebar-meta-label">Fecha</span>
-                    <span class="sidebar-meta-value highlight" id="time">28/08/2025</span>
-                </div>
-                <div class="sidebar-badges">
-                    <span class="status-pill">Conectado</span>
-                    <span class="status-pill ghost">Offline / No premium</span>
-                </div>
-            </div>
-
-            <div class="card">
-                <div class="card-head">
-                    <div class="card-icon">👤</div>
-                    <div>
-                        <h3>Jugador</h3>
-                        <div class="card-subtitle">Identidad de la sesión</div>
-                    </div>
-                </div>
-                <div class="card-metric">
-                    <span class="metric-label">Nombre</span>
-                    <span class="metric-value highlight" id="username">ManoloZP</span>
-                </div>
-                <div class="card-metric">
-                    <span class="metric-label">Versión</span>
-                    <span class="metric-value" id="version">Obteniendo...</span>
-                </div>
-            </div>
-
-            <div class="card">
-                <div class="card-head">
-                    <div class="card-icon">🌐</div>
-                    <div>
-                        <h3>Conexión</h3>
-                        <div class="card-subtitle">Latencia del servidor</div>
-                    </div>
-                </div>
-                <div class="card-metric">
-                    <span class="metric-label">Ping</span>
-                    <span class="metric-value" id="ping">0 ms</span>
-                </div>
-            </div>
-
-            <div class="card">
-                <div class="card-head">
-                    <div class="card-icon">🖥</div>
-                    <div>
-                        <h3>Servidor</h3>
-                        <div class="card-subtitle">Dirección IP</div>
-                    </div>
-                </div>
-                <div class="card-metric">
-                    <span class="metric-label">Host</span>
-                    <span class="metric-value" id="server">mc.haliacraft.com</span>
-                </div>
-                <div class="card-metric">
-                    <span class="metric-label">Puerto</span>
-                    <span class="metric-value" id="port">25565</span>
-                </div>
-            </div>
-        </div>
-
-        <div id="menu-panel" aria-live="polite">
-            <div id="menu-header">
-                <div>
-                    <div id="menu-title">Sin menú activo</div>
-                    <div id="menu-meta">Cuando el servidor abra un inventario, aparecerá aquí.</div>
-                </div>
-                <button id="menu-close-btn" type="button" class="menu-close-btn" aria-label="Cerrar panel">✕</button>
-            </div>
-            <div id="menu-busy">Cambiando de servidor...</div>
-            <input id="menu-search" type="text" placeholder="Buscar por nombre o lore">
-            <div id="menu-base-filters"></div>
-            <div id="menu-results"></div>
-            <div id="menu-grid"></div>
-            <div id="menu-empty" class="menu-empty">Aún no hay opciones disponibles.</div>
-        </div>
-    </div>
-
-
-
-    <div id="action-modal" class="action-modal" aria-hidden="true">
-        <div class="action-modal-content">
-            <div class="action-modal-header">
-                <span id="action-modal-title" class="action-modal-title">Interactuar con Ítem</span>
-                <button id="action-modal-close-btn" type="button" class="action-modal-close"
-                    aria-label="Cerrar modal">✕</button>
-            </div>
-            <div class="action-modal-body">
-                <p id="action-modal-text">¿Cómo quieres hacer clic en el objeto?</p>
-                <div class="action-modal-buttons">
-                    <button id="action-btn-left" type="button" class="action-btn left">Clic Izquierdo</button>
-                    <button id="action-btn-right" type="button" class="action-btn right">Clic Derecho</button>
-                    <button id="action-btn-use" type="button" class="action-btn use"
-                        style="grid-column: span 2; margin-top: 4px;">⚡ Usar / Equipar en mano</button>
-                </div>
-            </div>
-        </div>
-    </div>
-
-    <script src="https://unpkg.com/lucide@latest"></script>
-    <script src="js/shared/utils.js"></script>
-    <script src="js/launcher.js"></script>
-
+  <script src="https://unpkg.com/lucide@latest"></script>
+  <script src="js/shared/utils.js"></script>
+  <script src="js/launcher.js"></script>
 </body>
-
 </html>
-
-
-
-
-
