@@ -111,7 +111,7 @@ function createWindow() {
   });
   mainWindow = win;
 
-  win.loadFile(path.join(__dirname, "index.html"));
+  win.loadFile(path.join(__dirname, "launcher.html"));
 
   if (!app.isPackaged) {
     const devMenu = Menu.buildFromTemplate([
@@ -207,3 +207,4 @@ app.whenReady().then(() => {
 app.on("window-all-closed", () => {
   if (process.platform !== "darwin") app.quit();
 });
+

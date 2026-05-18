@@ -1,0 +1,1279 @@
+<!DOCTYPE html>
+<html lang="es">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Chat del Bot</title>
+    <link rel="stylesheet" href="css/main.css">
+    <style>
+        html,
+        body {
+            overflow-x: hidden;
+            overflow-y: auto;
+        }
+
+        body {
+            min-height: 100vh;
+            height: auto;
+            visibility: hidden;
+        }
+
+        #container {
+            min-height: 100vh;
+            height: auto;
+        }
+    </style>
+</head>
+
+<body>
+    <style>#launcher-overlay{display:none !important;}</style>
+    <div id="launcher-overlay" class="launcher-overlay">
+        <video id="launcher-bg-video" class="launcher-bg-video" autoplay muted loop playsinline></video>
+        <audio id="launcher-menu-audio" loop>
+            <source src="mp3/main-menu.mp3" type="audio/mpeg">
+        </audio>
+        <button id="launcher-audio-toggle" class="launcher-audio-toggle" type="button" aria-label="Silenciar música" title="Silenciar música">
+            <i data-lucide="volume-2"></i>
+        </button>
+        <div class="launcher-shell">
+            <div class="launcher-brand">MC-BETA</div>
+            <div class="launcher-sub">Modo Electron</div>
+            <div class="launcher-menu" id="launcher-main-menu">
+                <button type="button" id="menu-play-btn" class="launcher-btn">Jugar (Multijugador)</button>
+                <button type="button" id="menu-config-btn" class="launcher-btn">Configuracion</button>
+                <button type="button" id="menu-info-btn" class="launcher-btn">Informacion</button>
+                <button type="button" id="menu-fullscreen-btn" class="launcher-btn">Pantalla completa (F11)</button>
+            </div>
+
+            <div id="launcher-play-view" class="launcher-view">
+                <div class="launcher-section-title">Jugar (Multijugador)</div>
+                <div class="launcher-row">
+                    <button type="button" id="continue-last-btn" class="launcher-btn alt">Continuar con la
+                        ultima</button>
+                    <button type="button" id="create-new-btn" class="launcher-btn alt">Crear nueva</button>
+                </div>
+                <div id="new-profile-form" class="launcher-form hidden">
+                    <input id="new-username" type="text" placeholder="Nickname offline/no premium">
+                    <input id="new-ip" type="text" placeholder="IP (ej: mc.haliacraft.com)">
+                    <input id="new-port" type="number" placeholder="Puerto (25565)">
+                    <input id="new-version" type="text" placeholder="Version (ej: 1.21.11)">
+                    <button type="button" id="start-new-profile-btn" class="launcher-btn">Iniciar nueva partida</button>
+                </div>
+                <button type="button" id="play-back-btn" class="launcher-link">Volver</button>
+            </div>
+
+            <div id="launcher-config-view" class="launcher-view">
+                <div class="launcher-section-title">Configuracion (config.json)</div>
+                <div class="launcher-form">
+                    <label for="cfg-client-id">Discord Client ID</label>
+                    <input id="cfg-client-id" type="text" placeholder="your_discord_app_client_id_here">
+
+                    <label for="cfg-preferred-versions">Preferred Versions (Mineflayer)</label>
+                    <select id="cfg-preferred-versions" multiple size="7">
+                        <option value="1.16.5">1.16.5</option>
+                        <option value="1.17.1">1.17.1</option>
+                        <option value="1.18.2">1.18.2</option>
+                        <option value="1.19.4">1.19.4</option>
+                        <option value="1.20.1">1.20.1</option>
+                        <option value="1.20.4">1.20.4</option>
+                        <option value="1.20.6">1.20.6</option>
+                        <option value="1.21">1.21</option>
+                        <option value="1.21.1">1.21.1</option>
+                        <option value="1.21.4">1.21.4</option>
+                        <option value="1.21.8">1.21.8</option>
+                        <option value="1.21.11">1.21.11</option>
+                    </select>
+
+                    <label for="cfg-reconnect-delay">Reconnect Delay (ms)</label>
+                    <input id="cfg-reconnect-delay" type="number" min="0" step="50" placeholder="650">
+
+                    <label class="launcher-check">
+                        <input id="cfg-velocity-compat" type="checkbox">
+                        <span>Velocity Compat Mode</span>
+                    </label>
+
+                    <label class="launcher-check">
+                        <input id="cfg-debug-lifecycle" type="checkbox">
+                        <span>Debug Lifecycle</span>
+                    </label>
+                </div>
+                <div class="launcher-row">
+                    <label for="bg-video-mode-select">Video menu:</label>
+                    <select id="bg-video-mode-select">
+                        <option value="auto">Auto</option>
+                        <option value="1080p">Forzar 1080p</option>
+                        <option value="2k">Forzar 2K</option>
+                        <option value="4k">Forzar 4K</option>
+                    </select>
+                </div>
+                <div class="launcher-row">
+                    <button type="button" id="save-config-btn" class="launcher-btn">Guardar config.json</button>
+                    <button type="button" id="config-back-btn" class="launcher-link">Volver</button>
+                </div>
+            </div>
+
+            <div id="launcher-info-view" class="launcher-view">
+                <div class="launcher-section-title">Informacion</div>
+                <pre id="info-content"></pre>
+                <button type="button" id="info-back-btn" class="launcher-link">Volver</button>
+            </div>
+
+            <div id="launcher-status" class="launcher-status"></div>
+        </div>
+    </div>
+    <div id="container">
+        <!-- Columna izquierda: Chat -->
+        <div id="chat-section">
+            <div id="vitals-hud" class="vitals-hud">
+                <div class="vital-card">
+                    <span class="vital-icon" aria-hidden="true">❤️</span>
+                    <span class="vital-label">Vida</span>
+                    <span class="vital-value" id="hud-health">--/20</span>
+                </div>
+                <div class="vital-card">
+                    <span class="vital-icon" aria-hidden="true">🍗</span>
+                    <span class="vital-label">Comida</span>
+                    <span class="vital-value" id="hud-food">--/20</span>
+                </div>
+            </div>
+            <div id="chat" style="overflow-wrap: anywhere;"></div>
+            <div id="reconnect-panel">
+                <div class="reconnect-copy">
+                    <div class="reconnect-title">Bot desconectado</div>
+                    <div class="reconnect-subtitle">Puedes reiniciar la conexión sin recargar la página.</div>
+                </div>
+                <button id="reconnect-button" type="button">Reconectar</button>
+            </div>
+            <div class="chat-controls">
+                <input type="text" id="input" placeholder="Escribe y presiona Enter">
+                <button id="inventory-button" type="button" class="btn-inventory-mini" title="Ver inventario"
+                    aria-label="Ver inventario">🎒</button>
+            </div>
+        </div>
+
+        <!-- Columna derecha: Info -->
+        <div id="sidebar">
+            <div class="card sidebar-hero">
+                <div class="sidebar-kicker" data-status="offline">Panel en vivo</div>
+                <h2>Información</h2>
+                <p>Estado de la sesión, jugador y servidor con lectura rápida.</p>
+                <div class="sidebar-meta">
+                    <span class="sidebar-meta-label">Fecha</span>
+                    <span class="sidebar-meta-value highlight" id="time">28/08/2025</span>
+                </div>
+                <div class="sidebar-badges">
+                    <span class="status-pill">Conectado</span>
+                    <span class="status-pill ghost">Offline / No premium</span>
+                </div>
+            </div>
+
+            <div class="card">
+                <div class="card-head">
+                    <div class="card-icon">👤</div>
+                    <div>
+                        <h3>Jugador</h3>
+                        <div class="card-subtitle">Identidad de la sesión</div>
+                    </div>
+                </div>
+                <div class="card-metric">
+                    <span class="metric-label">Nombre</span>
+                    <span class="metric-value highlight" id="username">ManoloZP</span>
+                </div>
+                <div class="card-metric">
+                    <span class="metric-label">Versión</span>
+                    <span class="metric-value" id="version">Obteniendo...</span>
+                </div>
+            </div>
+
+            <div class="card">
+                <div class="card-head">
+                    <div class="card-icon">🌐</div>
+                    <div>
+                        <h3>Conexión</h3>
+                        <div class="card-subtitle">Latencia del servidor</div>
+                    </div>
+                </div>
+                <div class="card-metric">
+                    <span class="metric-label">Ping</span>
+                    <span class="metric-value" id="ping">0 ms</span>
+                </div>
+            </div>
+
+            <div class="card">
+                <div class="card-head">
+                    <div class="card-icon">🖥</div>
+                    <div>
+                        <h3>Servidor</h3>
+                        <div class="card-subtitle">Dirección IP</div>
+                    </div>
+                </div>
+                <div class="card-metric">
+                    <span class="metric-label">Host</span>
+                    <span class="metric-value" id="server">mc.haliacraft.com</span>
+                </div>
+                <div class="card-metric">
+                    <span class="metric-label">Puerto</span>
+                    <span class="metric-value" id="port">25565</span>
+                </div>
+            </div>
+        </div>
+
+        <div id="menu-panel" aria-live="polite">
+            <div id="menu-header">
+                <div>
+                    <div id="menu-title">Sin menú activo</div>
+                    <div id="menu-meta">Cuando el servidor abra un inventario, aparecerá aquí.</div>
+                </div>
+                <button id="menu-close-btn" type="button" class="menu-close-btn" aria-label="Cerrar panel">✕</button>
+            </div>
+            <div id="menu-busy">Cambiando de servidor...</div>
+            <input id="menu-search" type="text" placeholder="Buscar por nombre o lore">
+            <div id="menu-base-filters"></div>
+            <div id="menu-results"></div>
+            <div id="menu-grid"></div>
+            <div id="menu-empty" class="menu-empty">Aún no hay opciones disponibles.</div>
+        </div>
+    </div>
+
+
+
+    <div id="action-modal" class="action-modal" aria-hidden="true">
+        <div class="action-modal-content">
+            <div class="action-modal-header">
+                <span id="action-modal-title" class="action-modal-title">Interactuar con Ítem</span>
+                <button id="action-modal-close-btn" type="button" class="action-modal-close"
+                    aria-label="Cerrar modal">✕</button>
+            </div>
+            <div class="action-modal-body">
+                <p id="action-modal-text">¿Cómo quieres hacer clic en el objeto?</p>
+                <div class="action-modal-buttons">
+                    <button id="action-btn-left" type="button" class="action-btn left">Clic Izquierdo</button>
+                    <button id="action-btn-right" type="button" class="action-btn right">Clic Derecho</button>
+                    <button id="action-btn-use" type="button" class="action-btn use"
+                        style="grid-column: span 2; margin-top: 4px;">⚡ Usar / Equipar en mano</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <script>
+        var launcherAPI = window.launcherAPI || null;
+        let ws = null;
+        let reconnectSocketTimer = null;
+        let manualSocketClose = false;
+        let gameStarted = false;
+        const chat = document.getElementById("chat");
+        const input = document.getElementById("input");
+        const reconnectPanel = document.getElementById("reconnect-panel");
+        const reconnectButton = document.getElementById("reconnect-button");
+        const menuPanel = document.getElementById("menu-panel");
+        const menuTitle = document.getElementById("menu-title");
+        const menuMeta = document.getElementById("menu-meta");
+        const menuSearch = document.getElementById("menu-search");
+        const menuBaseFilters = document.getElementById("menu-base-filters");
+        const menuResults = document.getElementById("menu-results");
+        const menuGrid = document.getElementById("menu-grid");
+        const menuEmpty = document.getElementById("menu-empty");
+        const menuBusy = document.getElementById("menu-busy");
+        const sidebarKicker = document.querySelector(".sidebar-kicker");
+        const menuCloseBtn = document.getElementById("menu-close-btn");
+        const inventoryButton = document.getElementById("inventory-button");
+        const hudHealth = document.getElementById("hud-health");
+        const hudFood = document.getElementById("hud-food");
+        const launcherOverlay = document.getElementById("launcher-overlay");
+        const launcherBgVideo = document.getElementById("launcher-bg-video");
+        const bgVideoModeSelect = document.getElementById("bg-video-mode-select");
+        const launcherMenuAudio = document.getElementById("launcher-menu-audio");
+        const launcherAudioToggle = document.getElementById("launcher-audio-toggle");
+        const launcherStatus = document.getElementById("launcher-status");
+        const launcherMainMenu = document.getElementById("launcher-main-menu");
+        const launcherPlayView = document.getElementById("launcher-play-view");
+        const launcherConfigView = document.getElementById("launcher-config-view");
+        const launcherInfoView = document.getElementById("launcher-info-view");
+        let activeMenu = null;
+        let menuQuery = "";
+        let menuBusyState = false;
+        let currentSessionId = null;
+        let chatHistory = [];
+        const chatHistoryLimit = 300;
+        const inputHistoryLimit = 30;
+        const inputHistory = [];
+        let inputHistoryIndex = -1;
+        let inputDraft = "";
+        const hiddenBaseNames = new Set();
+        let cachedLauncherConfig = {};
+        let currentBgVideoMode = "auto";
+        let currentBgVideoSrc = "";
+        let menuAudioMuted = false;
+
+        const BG_1080_SRC = "mp4/menu-main.mp4";
+        const BG_2K_SRC = "mp4/2k-menu-main.mp4";
+        const BG_4K_SRC = "mp4/4k-menu-main.mp4";
+
+        function chooseBackgroundSource(mode) {
+            if (mode === "1080p") {
+                return BG_1080_SRC;
+            }
+            if (mode === "4k") {
+                return BG_4K_SRC;
+            }
+            if (mode === "2k") {
+                return BG_2K_SRC;
+            }
+
+            const fullScreen = Boolean(document.fullscreenElement) || Boolean(window.matchMedia("(display-mode: fullscreen)").matches);
+            const width = Math.max(window.innerWidth || 0, window.screen?.width || 0);
+            const height = Math.max(window.innerHeight || 0, window.screen?.height || 0);
+            if (fullScreen || width > 2560 || height > 1440) {
+                return BG_4K_SRC;
+            }
+            if (width > 1920 || height > 1080) {
+                return BG_2K_SRC;
+            }
+            return BG_1080_SRC;
+        }
+
+        function applyLauncherBackgroundVideo(mode = currentBgVideoMode) {
+            if (!launcherBgVideo) return;
+            const normalized = ["auto", "1080p", "2k", "4k"].includes(String(mode)) ? String(mode) : "auto";
+            currentBgVideoMode = normalized;
+            const selected = chooseBackgroundSource(normalized);
+            if (selected === currentBgVideoSrc) return;
+
+            currentBgVideoSrc = selected;
+            launcherBgVideo.src = selected;
+            launcherBgVideo.load();
+            launcherBgVideo.play().catch(() => {
+                // Puede requerir interacción del usuario.
+            });
+        }
+
+        function sendSocketMessage(payload) {
+            if (!ws || ws.readyState !== WebSocket.OPEN) {
+                return false;
+            }
+
+            ws.send(typeof payload === "string" ? payload : JSON.stringify(payload));
+            return true;
+        }
+
+        function sanitizeVisibleText(value) {
+            return String(value || "")
+                .replace(/\uFFFD+/g, "")
+                .replace(/[\u0000-\u001F\u007F]/g, " ")
+                .replace(/\s+/g, " ")
+                .trim();
+        }
+
+        function formatVital(value) {
+            const n = Number(value);
+            if (!Number.isFinite(n)) {
+                return "--/20";
+            }
+            const clamped = Math.max(0, Math.min(20, Math.round(n)));
+            return `${clamped}/20`;
+        }
+
+        function setVitals(health, food) {
+            if (hudHealth) {
+                hudHealth.textContent = formatVital(health);
+            }
+            if (hudFood) {
+                hudFood.textContent = formatVital(food);
+            }
+        }
+
+        function revealWindowWhenMenuReady() {
+            document.body.style.visibility = "visible";
+            if (launcherAPI && typeof launcherAPI.menuReady === "function") {
+                launcherAPI.menuReady().catch(() => { });
+            }
+        }
+
+        function updateMenuAudioToggle() {
+            if (!launcherAudioToggle || !launcherMenuAudio) {
+                return;
+            }
+            launcherMenuAudio.muted = menuAudioMuted;
+            launcherAudioToggle.innerHTML = `<i data-lucide="${menuAudioMuted ? "volume-x" : "volume-2"}"></i>`;
+            launcherAudioToggle.setAttribute("aria-label", menuAudioMuted ? "Activar música" : "Silenciar música");
+            launcherAudioToggle.setAttribute("title", menuAudioMuted ? "Activar música" : "Silenciar música");
+            if (window.lucide && typeof window.lucide.createIcons === "function") {
+                window.lucide.createIcons({
+                    icons: window.lucide.icons,
+                    attrs: { width: 17, height: 17, "stroke-width": 2.2 }
+                });
+            }
+        }
+
+        function pushInputHistory(value) {
+            const text = String(value || "").trim();
+            if (!text) {
+                return;
+            }
+
+            if (inputHistory[inputHistory.length - 1] === text) {
+                inputHistoryIndex = -1;
+                inputDraft = "";
+                return;
+            }
+
+            inputHistory.push(text);
+            if (inputHistory.length > inputHistoryLimit) {
+                inputHistory.splice(0, inputHistory.length - inputHistoryLimit);
+            }
+
+            inputHistoryIndex = -1;
+            inputDraft = "";
+        }
+
+        function stepInputHistory(direction) {
+            if (inputHistory.length === 0) {
+                return;
+            }
+
+            if (inputHistoryIndex === -1) {
+                inputDraft = input.value;
+                inputHistoryIndex = inputHistory.length;
+            }
+
+            inputHistoryIndex = Math.max(0, Math.min(inputHistory.length, inputHistoryIndex + direction));
+
+            if (inputHistoryIndex === inputHistory.length) {
+                input.value = inputDraft;
+                return;
+            }
+
+            input.value = inputHistory[inputHistoryIndex] || "";
+        }
+
+        function resetChatHistory(sessionId, history = []) {
+            currentSessionId = sessionId || null;
+            chatHistory = Array.isArray(history) ? history.slice(-chatHistoryLimit) : [];
+            chat.innerHTML = "";
+            chatHistory.forEach(entry => {
+                renderLine(entry.text, entry.source || entry.kind || "normal", false);
+            });
+            chat.scrollTop = chat.scrollHeight;
+        }
+
+        function renderLine(text, kind = "normal", persist = true) {
+            text = sanitizeVisibleText(text);
+            if (!text) {
+                return;
+            }
+
+            const wasAtBottom = chat.scrollTop + chat.clientHeight >= chat.scrollHeight - 50;
+            const line = document.createElement("div");
+            line.textContent = text;
+
+            if (kind === "system") {
+                line.style.color = "#7dd3fc";
+            } else if (kind === "player" || kind === "local") {
+                line.style.color = "#ffffff";
+            } else if (kind === "server") {
+                line.style.color = "#fca5a5";
+            }
+
+            chat.appendChild(line);
+
+            if (persist) {
+                chatHistory.push({ text, source: kind });
+                if (chatHistory.length > chatHistoryLimit) {
+                    chatHistory = chatHistory.slice(-chatHistoryLimit);
+                    while (chat.childNodes.length > chatHistoryLimit) {
+                        chat.removeChild(chat.firstChild);
+                    }
+                }
+            }
+
+            if (wasAtBottom) {
+                chat.scrollTop = chat.scrollHeight;
+            }
+        }
+
+        function appendLine(text, kind = "normal") {
+            renderLine(text, kind, true);
+        }
+
+        function setBotStatus(status) {
+            const normalized = String(status || "offline").toLowerCase();
+            sidebarKicker.dataset.status = normalized === "online" ? "online" : normalized === "connecting" ? "connecting" : "offline";
+
+            if (normalized === "online") {
+                reconnectPanel.classList.remove("visible");
+                reconnectButton.disabled = false;
+                reconnectButton.textContent = "Reconectar";
+            } else {
+                reconnectPanel.classList.add("visible");
+                reconnectButton.disabled = normalized === "connecting";
+                reconnectButton.textContent = normalized === "connecting" ? "Reiniciando..." : "Reconectar";
+            }
+        }
+
+        function clearMenu() {
+            activeMenu = null;
+            menuBusyState = false;
+            menuPanel.classList.remove("visible");
+            menuPanel.classList.remove("busy");
+            menuTitle.textContent = "Sin menú activo";
+            menuMeta.textContent = "Cuando el servidor abra un inventario, aparecerá aquí.";
+            menuResults.textContent = "";
+            menuBaseFilters.innerHTML = "";
+            menuGrid.innerHTML = "";
+            menuEmpty.textContent = "Aún no hay opciones disponibles.";
+            menuBusy.textContent = "Cambiando de servidor...";
+            menuSearch.value = "";
+            menuQuery = "";
+        }
+
+        function getBaseLabel(item) {
+            return normalizeQueryText(item.name || "");
+        }
+
+        function renderBaseFilters(items) {
+            const baseCounts = new Map();
+
+            for (const item of items) {
+                const baseName = getBaseLabel(item);
+                if (!baseName) {
+                    continue;
+                }
+                baseCounts.set(baseName, (baseCounts.get(baseName) || 0) + 1);
+            }
+
+            const sortedBases = [...baseCounts.entries()].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]));
+            menuBaseFilters.innerHTML = "";
+
+            if (sortedBases.length === 0) {
+                return;
+            }
+
+            sortedBases.forEach(([baseName, count]) => {
+                const label = document.createElement("label");
+                label.className = "menu-base-filter";
+                const checkbox = document.createElement("input");
+                checkbox.type = "checkbox";
+                checkbox.checked = hiddenBaseNames.has(baseName);
+                checkbox.addEventListener("change", () => {
+                    if (checkbox.checked) {
+                        hiddenBaseNames.add(baseName);
+                    } else {
+                        hiddenBaseNames.delete(baseName);
+                    }
+                    applyMenuFilter();
+                });
+
+                const text = document.createElement("span");
+                text.textContent = `Ocultar ${baseName} (${count})`;
+                label.appendChild(checkbox);
+                label.appendChild(text);
+                menuBaseFilters.appendChild(label);
+            });
+        }
+
+        function renderMenu(menu) {
+            if (!menu || !Array.isArray(menu.slots) || menu.slots.length === 0) {
+                clearMenu();
+                return;
+            }
+
+            activeMenu = menu;
+            menuPanel.classList.add("visible");
+            menuPanel.classList.toggle("busy", menuBusyState);
+            menuTitle.textContent = menu.title || "Menú del servidor";
+            menuMeta.textContent = `Slots visibles: ${menu.slots.length}/${menu.slotCount || menu.slots.length} | Token: ${menu.token}`;
+            renderBaseFilters(menu.slots);
+            menuGrid.innerHTML = "";
+            applyMenuFilter();
+        }
+
+        function formatLore(lore) {
+            if (!Array.isArray(lore) || lore.length === 0) {
+                return "";
+            }
+
+            return lore.map(line => line.trim()).filter(Boolean).join("\n");
+        }
+
+        function normalizeQueryText(value) {
+            return String(value || "")
+                .trim()
+                .toLowerCase();
+        }
+
+        function parseMenuQuery(rawQuery) {
+            const tokens = String(rawQuery || "")
+                .trim()
+                .split(/\s+/)
+                .filter(Boolean);
+            const excludesBase = [];
+            const includes = [];
+
+            for (const token of tokens) {
+                const normalized = normalizeQueryText(token);
+                const baseMatch = normalized.match(/^(?:-base:|!base:|base!=)(.+)$/);
+
+                if (baseMatch) {
+                    const value = baseMatch[1].trim();
+                    if (value) {
+                        excludesBase.push(value);
+                    }
+                    continue;
+                }
+
+                includes.push(normalized);
+            }
+
+            return { includes, excludesBase };
+        }
+
+        function matchesMenuItem(item, filter) {
+            const searchText = normalizeQueryText(item.searchText);
+            const baseName = getBaseLabel(item);
+
+            if (hiddenBaseNames.has(baseName)) {
+                return false;
+            }
+
+            if (filter.includes.length === 0) {
+                return true;
+            }
+
+            return filter.includes.every(term => searchText.includes(term));
+        }
+
+        function getItemIcon(item) {
+            const haystack = `${item.customName || ""} ${item.displayName || ""} ${item.name || ""}`.toLowerCase();
+            const rules = [
+                { match: ["player_head", "head"], icon: "👤", kind: "head" },
+                { match: ["diamond_sword", "iron_sword", "netherite_sword", "stone_sword", "wooden_sword", "golden_sword"], icon: "⚔", kind: "utility" },
+                { match: ["bow", "crossbow"], icon: "🏹", kind: "utility" },
+                { match: ["clock"], icon: "⏰", kind: "utility" },
+                { match: ["ender_chest"], icon: "📦", kind: "utility" },
+                { match: ["barrier"], icon: "⛔", kind: "danger" },
+                { match: ["lime_dye", "emerald"], icon: "✅", kind: "success" },
+                { match: ["orange_bed", "red_bed", "blue_bed"], icon: "🛏", kind: "success" },
+                { match: ["glass_pane"], icon: "▣", kind: "block" },
+                { match: ["bed"], icon: "🛏", kind: "success" },
+                { match: ["chest", "shulker_box"], icon: "🧰", kind: "utility" },
+                { match: ["dye"], icon: "●", kind: "block" },
+                { match: ["book"], icon: "📘", kind: "utility" },
+                { match: ["compass"], icon: "🧭", kind: "utility" },
+            ];
+
+            for (const rule of rules) {
+                if (rule.match.some(token => haystack.includes(token))) {
+                    return rule;
+                }
+            }
+
+            const firstChar = (item.customName || item.displayName || item.name || "?").trim().charAt(0).toUpperCase();
+            return { icon: firstChar || "?", kind: "block" };
+        }
+
+        function applyMenuFilter() {
+            if (!activeMenu) {
+                return;
+            }
+
+            const filter = parseMenuQuery(menuQuery);
+            const items = Array.isArray(activeMenu.slots) ? activeMenu.slots : [];
+            const visibleItems = items.filter(item => matchesMenuItem(item, filter));
+
+            menuGrid.innerHTML = "";
+
+            if (items.length === 0) {
+                menuEmpty.textContent = "No hay items interactivos en este menú.";
+                menuResults.textContent = "";
+                return;
+            }
+
+            if (visibleItems.length === 0) {
+                menuEmpty.textContent = "No hay resultados para esta búsqueda.";
+                menuResults.textContent = `0 coincidencias de ${items.length} items`;
+                return;
+            }
+
+            menuEmpty.textContent = "Haz click en un item para que el bot haga click en ese slot.";
+            menuResults.textContent = `${visibleItems.length} de ${items.length} items visibles`;
+
+            visibleItems.forEach((item) => {
+                const button = document.createElement("button");
+                button.type = "button";
+                button.className = "menu-item";
+                button.innerHTML = `
+                    <div class="menu-item-icon" aria-hidden="true"></div>
+                    <div class="menu-item-body">
+                        <span class="menu-item-slot">Slot ${item.slot}</span>
+                        <span class="menu-item-name"></span>
+                        <span class="menu-item-count"></span>
+                        <div class="menu-item-base"></div>
+                        <div class="menu-item-lore"></div>
+                    </div>
+                `;
+                const itemIcon = getItemIcon(item);
+                const iconBox = button.querySelector(".menu-item-icon");
+                iconBox.textContent = itemIcon.icon;
+                iconBox.dataset.kind = itemIcon.kind || "block";
+                button.querySelector(".menu-item-name").textContent = item.customName || item.displayName || item.name || "Elemento";
+                button.querySelector(".menu-item-count").textContent = item.count && item.count > 1 ? `x${item.count}` : "";
+                button.querySelector(".menu-item-base").textContent = item.customName && item.name && item.customName !== item.name ? `Base: ${item.name}` : "";
+
+                const loreBox = button.querySelector(".menu-item-lore");
+                const loreText = formatLore(item.lore);
+                if (loreText) {
+                    loreBox.textContent = loreText;
+                    loreBox.style.whiteSpace = "pre-wrap";
+                } else {
+                    loreBox.textContent = "";
+                }
+
+                button.addEventListener("click", () => {
+                    const currentMenu = activeMenu;
+                    if (!currentMenu) {
+                        return;
+                    }
+
+                    showActionModal(item, (clickType) => {
+                        const menuToken = currentMenu.token;
+
+                        if (currentMenu.windowId !== "inventory") {
+                            menuBusyState = true;
+                            menuPanel.classList.add("busy");
+                            menuBusy.textContent = "Cambiando de servidor...";
+                            button.disabled = true;
+                        }
+
+                        sendSocketMessage({
+                            type: "menuAction",
+                            token: menuToken,
+                            slot: item.slot,
+                            clickType: clickType,
+                        });
+
+                        const clickName = clickType === "right" ? "derecho" : "izquierdo";
+                        appendLine(`[MENU] Click ${clickName} en slot ${item.slot}: ${item.displayName || item.name || "Elemento"}`, "system");
+                    });
+                });
+                menuGrid.appendChild(button);
+            });
+        }
+
+        function connectSocket() {
+            if (reconnectSocketTimer) {
+                clearTimeout(reconnectSocketTimer);
+                reconnectSocketTimer = null;
+            }
+
+            ws = new WebSocket("ws://127.0.0.1:3000");
+
+            ws.onopen = () => {
+                if (!manualSocketClose) {
+                    reconnectPanel.classList.remove("visible");
+                    reconnectButton.disabled = false;
+                    reconnectButton.textContent = "Reconectar";
+                }
+            };
+
+            ws.onmessage = e => {
+                let data;
+                try {
+                    data = JSON.parse(e.data);
+                } catch {
+                    appendLine(sanitizeVisibleText(String(e.data)));
+                    return;
+                }
+
+                if (typeof data.type === "undefined") {
+                    appendLine(sanitizeVisibleText(String(e.data)));
+                    return;
+                }
+
+
+                // Actualizar la barra lateral si el mensaje es de tipo 'sidebar'
+                if (data.type == "sidebar") {
+                    document.getElementById('ping').textContent = 'Obteniendo...';
+                    document.getElementById('version').textContent = data.version;
+                    document.getElementById('username').textContent = data.username;
+                    document.getElementById('time').textContent = data.time;
+                    document.getElementById('server').textContent = data.server;
+                    document.getElementById('port').textContent = data.port || '25565';
+                    setVitals(data.health, data.food);
+                    setBotStatus(data.botStatus);
+                    if (data.sessionId && data.sessionId !== currentSessionId) {
+                        resetChatHistory(data.sessionId, Array.isArray(data.chatHistory) ? data.chatHistory : []);
+                    } else if (Array.isArray(data.chatHistory)) {
+                        resetChatHistory(data.sessionId || currentSessionId, data.chatHistory);
+                    }
+
+                }
+                else if (data.type == "chatHistory") {
+                    if (data.sessionId && data.sessionId !== currentSessionId) {
+                        resetChatHistory(data.sessionId, Array.isArray(data.history) ? data.history : []);
+                    } else if (Array.isArray(data.history)) {
+                        resetChatHistory(data.sessionId || currentSessionId, data.history);
+                    }
+                }
+                else if (data.type == "updatePing") {
+                    document.getElementById('ping').textContent = data.ping + ' ms';
+                }
+                else if (data.type == "vitals") {
+                    setVitals(data.health, data.food);
+                }
+                else if (data.type == "chat") {
+                    const prefix = data.source === "player" ? "[CHAT]" : data.source === "system" ? "[SYSTEM]" : "[SERVER]";
+                    appendLine(`${prefix} ${data.text}`, data.source);
+                }
+                else if (data.type == "menu") {
+                    renderMenu(data.menu);
+                }
+                else if (data.type == "menuClose") {
+                    clearMenu();
+                }
+                else if (data.type == "menuBusy") {
+                    menuBusyState = Boolean(data.busy);
+                    menuPanel.classList.toggle("busy", menuBusyState);
+                    menuBusy.textContent = data.message || "Cambiando de servidor...";
+                }
+                else if (data.type == "reconnectState") {
+                    const reconnecting = Boolean(data.busy);
+                    reconnectPanel.classList.toggle("visible", reconnecting || sidebarKicker.dataset.status === "offline");
+                    reconnectButton.disabled = reconnecting;
+                    reconnectButton.textContent = reconnecting ? "Reiniciando..." : "Reconectar";
+                    const subtitle = reconnectPanel.querySelector(".reconnect-subtitle");
+                    if (subtitle) {
+                        subtitle.textContent = data.message || "Puedes reiniciar la conexión sin recargar la página.";
+                    }
+                }
+
+            };
+
+            ws.onclose = () => {
+                if (!manualSocketClose) {
+                    reconnectPanel.classList.add("visible");
+                    reconnectButton.disabled = false;
+                    reconnectButton.textContent = "Reconectar";
+                    const subtitle = reconnectPanel.querySelector(".reconnect-subtitle");
+                    if (subtitle) {
+                        subtitle.textContent = "La conexión con el panel se cerró. Reintentando...";
+                    }
+                    reconnectSocketTimer = setTimeout(connectSocket, 1200);
+                }
+            };
+
+            ws.onerror = () => {
+                // El cierre y la reconexión quedan gestionados por onclose.
+            };
+        }
+
+        function startPanelSession() {
+            if (gameStarted) {
+                return;
+            }
+            gameStarted = true;
+            if (launcherMenuAudio) {
+                launcherMenuAudio.pause();
+                launcherMenuAudio.currentTime = 0;
+            }
+            launcherOverlay.classList.add("hidden");
+            connectSocket();
+        }
+
+        function setLauncherStatus(text, isError = false) {
+            launcherStatus.textContent = text || "";
+            launcherStatus.dataset.kind = isError ? "error" : "ok";
+        }
+
+        function loadConfigIntoForm(cfg) {
+            const config = cfg && typeof cfg === "object" ? cfg : {};
+            const launcher = config.launcher && typeof config.launcher === "object" ? config.launcher : {};
+            const versions = Array.isArray(launcher.preferredVersions) ? launcher.preferredVersions : [];
+
+            document.getElementById("cfg-client-id").value = String(config.clientId || "");
+            const versionsSet = new Set(versions.map((v) => String(v).trim()).filter(Boolean));
+            const versionsSelect = document.getElementById("cfg-preferred-versions");
+            if (versionsSelect) {
+                Array.from(versionsSelect.options).forEach((option) => {
+                    option.selected = versionsSet.has(option.value);
+                });
+            }
+            document.getElementById("cfg-reconnect-delay").value = String(launcher.reconnectDelayMs ?? 650);
+            document.getElementById("cfg-velocity-compat").checked = Boolean(launcher.velocityCompatMode);
+            document.getElementById("cfg-debug-lifecycle").checked = Boolean(launcher.debugLifecycle);
+        }
+
+        function buildConfigFromForm() {
+            const versionsSelect = document.getElementById("cfg-preferred-versions");
+            const preferredVersions = versionsSelect
+                ? Array.from(versionsSelect.selectedOptions).map((opt) => String(opt.value).trim()).filter(Boolean)
+                : [];
+
+            return {
+                clientId: String(document.getElementById("cfg-client-id").value || "").trim(),
+                launcher: {
+                    preferredVersions,
+                    velocityCompatMode: Boolean(document.getElementById("cfg-velocity-compat").checked),
+                    debugLifecycle: Boolean(document.getElementById("cfg-debug-lifecycle").checked),
+                    reconnectDelayMs: Number.parseInt(document.getElementById("cfg-reconnect-delay").value || "650", 10) || 650,
+                    menuBackgroundMode: bgVideoModeSelect ? bgVideoModeSelect.value : "auto",
+                },
+            };
+        }
+
+        function showLauncherView(view) {
+            launcherMainMenu.style.display = view === "main" ? "flex" : "none";
+            launcherPlayView.classList.toggle("visible", view === "play");
+            launcherConfigView.classList.toggle("visible", view === "config");
+            launcherInfoView.classList.toggle("visible", view === "info");
+            setLauncherStatus("");
+        }
+
+        async function openConfigView() {
+            showLauncherView("config");
+            if (!launcherAPI) return;
+            const cfg = await launcherAPI.getConfig();
+            cachedLauncherConfig = cfg || {};
+            const configuredMode = String(cfg?.launcher?.menuBackgroundMode || "auto").toLowerCase();
+            currentBgVideoMode = ["auto", "1080p", "2k", "4k"].includes(configuredMode) ? configuredMode : "auto";
+            if (bgVideoModeSelect) {
+                bgVideoModeSelect.value = currentBgVideoMode;
+            }
+            loadConfigIntoForm(cfg || {});
+        }
+
+        async function openInfoView() {
+            showLauncherView("info");
+            if (!launcherAPI) return;
+            const info = await launcherAPI.getInfo();
+            const text = [
+                `App: ${info.name}`,
+                `Version: ${info.version}`,
+                "",
+                "Creditos:",
+                ...(Array.isArray(info.credits) ? info.credits.map((line) => `- ${line}`) : []),
+                "",
+                "Funcionamiento:",
+                info.about || "",
+            ].join("\n");
+            document.getElementById("info-content").textContent = text;
+        }
+
+        async function toggleFullscreenMode() {
+            if (!launcherAPI || typeof launcherAPI.toggleFullscreen !== "function") {
+                return;
+            }
+            const state = await launcherAPI.toggleFullscreen();
+            const fullscreenBtn = document.getElementById("menu-fullscreen-btn");
+            if (fullscreenBtn && state?.ok) {
+                fullscreenBtn.textContent = state.isFullscreen ? "Salir de pantalla completa (F11)" : "Pantalla completa (F11)";
+            }
+        }
+
+        async function bootContinue() {
+            if (!launcherAPI) {
+                startPanelSession();
+                return;
+            }
+            setLauncherStatus("Iniciando ultima sesion...");
+            const result = await launcherAPI.startContinue();
+            if (!result?.ok) {
+                setLauncherStatus(result?.error || "No se pudo iniciar.", true);
+                return;
+            }
+            startPanelSession();
+        }
+
+        async function bootNewProfile() {
+            if (!launcherAPI) {
+                startPanelSession();
+                return;
+            }
+            const payload = {
+                username: document.getElementById("new-username").value.trim(),
+                ip: document.getElementById("new-ip").value.trim(),
+                port: document.getElementById("new-port").value.trim(),
+                version: document.getElementById("new-version").value.trim(),
+            };
+            setLauncherStatus("Creando perfil y arrancando bot...");
+            const result = await launcherAPI.startNew(payload);
+            if (!result?.ok) {
+                setLauncherStatus(result?.error || "No se pudo crear el perfil.", true);
+                return;
+            }
+            startPanelSession();
+        }
+
+        function bindClick(id, handler) {
+            const node = document.getElementById(id);
+            if (!node) {
+                console.error(`[Launcher] No existe el elemento #${id}`);
+                return;
+            }
+            node.addEventListener("click", handler);
+        }
+
+        function initLauncherMenu() {
+            bindClick("menu-play-btn", async () => {
+                showLauncherView("play");
+                if (launcherAPI) {
+                    const last = await launcherAPI.getLastProfile();
+                    if (last) {
+                        document.getElementById("new-username").value = last.username || "";
+                        document.getElementById("new-ip").value = last.ip || "";
+                        document.getElementById("new-port").value = String(last.port || 25565);
+                        document.getElementById("new-version").value = last.version || "";
+                    }
+                }
+            });
+            bindClick("menu-config-btn", openConfigView);
+            bindClick("menu-info-btn", openInfoView);
+            bindClick("menu-fullscreen-btn", toggleFullscreenMode);
+            bindClick("play-back-btn", () => showLauncherView("main"));
+            bindClick("config-back-btn", () => showLauncherView("main"));
+            bindClick("info-back-btn", () => showLauncherView("main"));
+            bindClick("continue-last-btn", bootContinue);
+            bindClick("create-new-btn", () => {
+                document.getElementById("new-profile-form").classList.remove("hidden");
+            });
+            bindClick("start-new-profile-btn", bootNewProfile);
+            bindClick("save-config-btn", async () => {
+                if (!launcherAPI) return;
+                try {
+                    const parsed = buildConfigFromForm();
+                    const result = await launcherAPI.saveConfig(parsed);
+                    if (!result?.ok) {
+                        setLauncherStatus(result?.error || "No se pudo guardar.", true);
+                        return;
+                    }
+                    cachedLauncherConfig = parsed;
+                    currentBgVideoMode = String(parsed.launcher.menuBackgroundMode || "auto").toLowerCase();
+                    applyLauncherBackgroundVideo(currentBgVideoMode);
+                    setLauncherStatus("config.json guardado.");
+                } catch {
+                    setLauncherStatus("JSON invalido en configuracion.", true);
+                }
+            });
+
+            if (bgVideoModeSelect) {
+                bgVideoModeSelect.addEventListener("change", () => {
+                    applyLauncherBackgroundVideo(bgVideoModeSelect.value);
+                });
+            }
+            showLauncherView("main");
+
+            if (launcherAPI && typeof launcherAPI.getFullscreen === "function") {
+                launcherAPI.getFullscreen().then((state) => {
+                    const fullscreenBtn = document.getElementById("menu-fullscreen-btn");
+                    if (fullscreenBtn && state?.ok) {
+                        fullscreenBtn.textContent = state.isFullscreen ? "Salir de pantalla completa (F11)" : "Pantalla completa (F11)";
+                    }
+                }).catch(() => {});
+            }
+        }
+
+        try {
+            initLauncherMenu();
+        } catch (error) {
+            console.error("[Launcher] Error inicializando menú:", error);
+            setLauncherStatus("Error inicializando el menu. Abre Debug/DevTools.", true);
+        }
+
+        if (launcherMenuAudio) {
+            const tryPlayMenuAudio = () => {
+                if (gameStarted) return;
+                launcherMenuAudio.volume = 0.35;
+                launcherMenuAudio.play().catch(() => {
+                    // Espera a primera interacción si autoplay es bloqueado.
+                });
+            };
+            tryPlayMenuAudio();
+            document.addEventListener("click", tryPlayMenuAudio, { once: true });
+            document.addEventListener("keydown", tryPlayMenuAudio, { once: true });
+        }
+
+        if (launcherAudioToggle) {
+            launcherAudioToggle.addEventListener("click", () => {
+                menuAudioMuted = !menuAudioMuted;
+                updateMenuAudioToggle();
+            });
+        }
+        updateMenuAudioToggle();
+
+        if (launcherAPI) {
+            launcherAPI.getConfig().then((cfg) => {
+                cachedLauncherConfig = cfg || {};
+                const mode = String(cfg?.launcher?.menuBackgroundMode || "auto").toLowerCase();
+                currentBgVideoMode = ["auto", "1080p", "2k", "4k"].includes(mode) ? mode : "auto";
+                if (bgVideoModeSelect) {
+                    bgVideoModeSelect.value = currentBgVideoMode;
+                }
+                applyLauncherBackgroundVideo(currentBgVideoMode);
+            }).catch(() => {
+                applyLauncherBackgroundVideo("auto");
+            });
+        } else {
+            applyLauncherBackgroundVideo("auto");
+        }
+
+        if (launcherBgVideo) {
+            launcherBgVideo.addEventListener("loadedmetadata", () => {
+                console.log(
+                    `[Launcher Video] source=${launcherBgVideo.videoWidth}x${launcherBgVideo.videoHeight} viewport=${window.innerWidth}x${window.innerHeight}`
+                );
+            });
+            window.addEventListener("resize", () => {
+                if (currentBgVideoMode === "auto") {
+                    applyLauncherBackgroundVideo("auto");
+                }
+            });
+            document.addEventListener("fullscreenchange", () => {
+                if (currentBgVideoMode === "auto") {
+                    applyLauncherBackgroundVideo("auto");
+                }
+            });
+        }
+
+        revealWindowWhenMenuReady();
+        gameStarted = true;
+        launcherOverlay.classList.add("hidden");
+        connectSocket();
+
+        document.addEventListener("keydown", (event) => {
+            if (event.key === "F11") {
+                event.preventDefault();
+                toggleFullscreenMode();
+            }
+        });
+
+        menuSearch.addEventListener("input", () => {
+            menuQuery = menuSearch.value || "";
+            applyMenuFilter();
+        });
+
+        reconnectButton.addEventListener("click", () => {
+            if (reconnectButton.disabled) {
+                return;
+            }
+
+            reconnectButton.disabled = true;
+            reconnectButton.textContent = "Solicitando...";
+            sendSocketMessage({
+                type: "reconnectRequest",
+            });
+        });
+
+        menuCloseBtn.addEventListener("click", () => {
+            clearMenu();
+        });
+
+        inventoryButton.addEventListener("click", () => {
+            if (sidebarKicker.dataset.status === "offline") {
+                appendLine("[SISTEMA] No puedes ver el inventario porque el bot está desconectado.", "system");
+                return;
+            }
+
+            if (!ws || ws.readyState !== WebSocket.OPEN) {
+                appendLine("[SISTEMA] El panel no esta conectado. Reintentando conexion...", "system");
+                connectSocket();
+                return;
+            }
+
+            clearMenu();
+            sendSocketMessage({
+                type: "inventoryRequest"
+            });
+        });
+
+
+
+
+        // Action Modal Functions
+        const actionModal = document.getElementById("action-modal");
+        const actionModalTitle = document.getElementById("action-modal-title");
+        const actionModalText = document.getElementById("action-modal-text");
+        const actionModalCloseBtn = document.getElementById("action-modal-close-btn");
+        const actionBtnLeft = document.getElementById("action-btn-left");
+        const actionBtnRight = document.getElementById("action-btn-right");
+        const actionBtnUse = document.getElementById("action-btn-use");
+
+        let onActionSelected = null;
+
+        function showActionModal(item, callback) {
+            actionModalTitle.textContent = item.displayName || item.name || "Interactuar";
+            actionModalText.textContent = `¿Cómo deseas hacer clic en ${item.displayName || item.name || "este objeto"} (Slot ${item.slot})?`;
+            onActionSelected = callback;
+            actionModal.classList.add("visible");
+            actionModal.setAttribute("aria-hidden", "false");
+        }
+
+        function hideActionModal() {
+            actionModal.classList.remove("visible");
+            actionModal.setAttribute("aria-hidden", "true");
+            onActionSelected = null;
+        }
+
+        actionModalCloseBtn.addEventListener("click", hideActionModal);
+
+        actionBtnLeft.addEventListener("click", () => {
+            if (typeof onActionSelected === "function") {
+                onActionSelected("left");
+            }
+            hideActionModal();
+        });
+
+        actionBtnRight.addEventListener("click", () => {
+            if (typeof onActionSelected === "function") {
+                onActionSelected("right");
+            }
+            hideActionModal();
+        });
+
+        actionBtnUse.addEventListener("click", () => {
+            if (typeof onActionSelected === "function") {
+                onActionSelected("use");
+            }
+            hideActionModal();
+        });
+
+        actionModal.addEventListener("click", (e) => {
+            if (e.target === actionModal) {
+                hideActionModal();
+            }
+        });
+
+        input.addEventListener("keydown", e => {
+            if (e.key === "ArrowUp") {
+                e.preventDefault();
+                stepInputHistory(-1);
+                return;
+            }
+
+            if (e.key === "ArrowDown") {
+                e.preventDefault();
+                stepInputHistory(1);
+                return;
+            }
+
+            if (e.key === "Enter") {
+                const text = input.value.trim();
+                if (text.length === 0) {
+                    return;
+                }
+
+                pushInputHistory(text);
+                sendSocketMessage(text);
+                input.value = "";
+                inputHistoryIndex = -1;
+                inputDraft = "";
+            }
+        });
+    </script>
+
+</body>
+
+</html>
+
+
