@@ -26,6 +26,50 @@
 </head>
 
 <body>
+    <div id="launcher-overlay" class="launcher-overlay">
+        <div class="launcher-shell">
+            <div class="launcher-brand">MC-BETA</div>
+            <div class="launcher-sub">Modo Electron</div>
+            <div class="launcher-menu" id="launcher-main-menu">
+                <button type="button" id="menu-play-btn" class="launcher-btn">Jugar (Multijugador)</button>
+                <button type="button" id="menu-config-btn" class="launcher-btn">Configuracion</button>
+                <button type="button" id="menu-info-btn" class="launcher-btn">Informacion</button>
+            </div>
+
+            <div id="launcher-play-view" class="launcher-view">
+                <div class="launcher-section-title">Jugar (Multijugador)</div>
+                <div class="launcher-row">
+                    <button type="button" id="continue-last-btn" class="launcher-btn alt">Continuar con la ultima</button>
+                    <button type="button" id="create-new-btn" class="launcher-btn alt">Crear nueva</button>
+                </div>
+                <div id="new-profile-form" class="launcher-form hidden">
+                    <input id="new-username" type="text" placeholder="Nickname offline/no premium">
+                    <input id="new-ip" type="text" placeholder="IP (ej: mc.haliacraft.com)">
+                    <input id="new-port" type="number" placeholder="Puerto (25565)">
+                    <input id="new-version" type="text" placeholder="Version (ej: 1.21.11)">
+                    <button type="button" id="start-new-profile-btn" class="launcher-btn">Iniciar nueva partida</button>
+                </div>
+                <button type="button" id="play-back-btn" class="launcher-link">Volver</button>
+            </div>
+
+            <div id="launcher-config-view" class="launcher-view">
+                <div class="launcher-section-title">Configuracion (config.json)</div>
+                <textarea id="config-editor" spellcheck="false"></textarea>
+                <div class="launcher-row">
+                    <button type="button" id="save-config-btn" class="launcher-btn">Guardar config.json</button>
+                    <button type="button" id="config-back-btn" class="launcher-link">Volver</button>
+                </div>
+            </div>
+
+            <div id="launcher-info-view" class="launcher-view">
+                <div class="launcher-section-title">Informacion</div>
+                <pre id="info-content"></pre>
+                <button type="button" id="info-back-btn" class="launcher-link">Volver</button>
+            </div>
+
+            <div id="launcher-status" class="launcher-status"></div>
+        </div>
+    </div>
     <div id="container">
         <!-- Columna izquierda: Chat -->
         <div id="chat-section">
@@ -76,6 +120,19 @@
 
             <div class="card">
                 <div class="card-head">
+                    <div class="card-icon">🎒</div>
+                    <div>
+                        <h3>Inventario</h3>
+                        <div class="card-subtitle">Objetos guardados</div>
+                    </div>
+                </div>
+                <div style="padding-top: 10px; border-top: 1px solid rgba(255, 255, 255, 0.05); display: flex; justify-content: center;">
+                    <button id="inventory-button" type="button" class="btn-inventory">Ver Inventario</button>
+                </div>
+            </div>
+
+            <div class="card">
+                <div class="card-head">
                     <div class="card-icon">🌐</div>
                     <div>
                         <h3>Conexión</h3>
@@ -113,6 +170,7 @@
                     <div id="menu-title">Sin menú activo</div>
                     <div id="menu-meta">Cuando el servidor abra un inventario, aparecerá aquí.</div>
                 </div>
+                <button id="menu-close-btn" type="button" class="menu-close-btn" aria-label="Cerrar panel">✕</button>
             </div>
             <div id="menu-busy">Cambiando de servidor...</div>
             <input id="menu-search" type="text" placeholder="Buscar por nombre o lore">
@@ -123,10 +181,31 @@
         </div>
     </div>
 
-    <script>
+    
+
+    <div id="action-modal" class="action-modal" aria-hidden="true">
+        <div class="action-modal-content">
+            <div class="action-modal-header">
+                <span id="action-modal-title" class="action-modal-title">Interactuar con Ítem</span>
+                <button id="action-modal-close-btn" type="button" class="action-modal-close" aria-label="Cerrar modal">✕</button>
+            </div>
+            <div class="action-modal-body">
+                <p id="action-modal-text">¿Cómo quieres hacer clic en el objeto?</p>
+                <div class="action-modal-buttons">
+                    <button id="action-btn-left" type="button" class="action-btn left">Clic Izquierdo</button>
+                    <button id="action-btn-right" type="button" class="action-btn right">Clic Derecho</button>
+                    <button id="action-btn-use" type="button" class="action-btn use" style="grid-column: span 2; margin-top: 4px;">⚡ Usar / Equipar en mano</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+<script>
+        const launcherAPI = window.launcherAPI || null;
         let ws = null;
         let reconnectSocketTimer = null;
         let manualSocketClose = false;
+        let gameStarted = false;
         const chat = document.getElementById("chat");
         const input = document.getElementById("input");
         const reconnectPanel = document.getElementById("reconnect-panel");
@@ -141,6 +220,14 @@
         const menuEmpty = document.getElementById("menu-empty");
         const menuBusy = document.getElementById("menu-busy");
         const sidebarKicker = document.querySelector(".sidebar-kicker");
+        const menuCloseBtn = document.getElementById("menu-close-btn");
+        const inventoryButton = document.getElementById("inventory-button");
+        const launcherOverlay = document.getElementById("launcher-overlay");
+        const launcherStatus = document.getElementById("launcher-status");
+        const launcherMainMenu = document.getElementById("launcher-main-menu");
+        const launcherPlayView = document.getElementById("launcher-play-view");
+        const launcherConfigView = document.getElementById("launcher-config-view");
+        const launcherInfoView = document.getElementById("launcher-info-view");
         let activeMenu = null;
         let menuQuery = "";
         let menuBusyState = false;
@@ -160,6 +247,14 @@
 
             ws.send(typeof payload === "string" ? payload : JSON.stringify(payload));
             return true;
+        }
+
+        function sanitizeVisibleText(value) {
+            return String(value || "")
+                .replace(/\uFFFD+/g, "")
+                .replace(/[\u0000-\u001F\u007F]/g, " ")
+                .replace(/\s+/g, " ")
+                .trim();
         }
 
         function pushInputHistory(value) {
@@ -214,6 +309,11 @@
         }
 
         function renderLine(text, kind = "normal", persist = true) {
+            text = sanitizeVisibleText(text);
+            if (!text) {
+                return;
+            }
+
             const wasAtBottom = chat.scrollTop + chat.clientHeight >= chat.scrollHeight - 50;
             const line = document.createElement("div");
             line.textContent = text;
@@ -485,19 +585,27 @@
                     if (!currentMenu) {
                         return;
                     }
-                    const menuToken = currentMenu.token;
+                    
+                    showActionModal(item, (clickType) => {
+                        const menuToken = currentMenu.token;
 
-                    menuBusyState = true;
-                    menuPanel.classList.add("busy");
-                    menuBusy.textContent = "Cambiando de servidor...";
-                    button.disabled = true;
-                    sendSocketMessage({
-                        type: "menuAction",
-                        token: menuToken,
-                        slot: item.slot,
-                        clickType: "left",
+                        if (currentMenu.windowId !== "inventory") {
+                            menuBusyState = true;
+                            menuPanel.classList.add("busy");
+                            menuBusy.textContent = "Cambiando de servidor...";
+                            button.disabled = true;
+                        }
+
+                        sendSocketMessage({
+                            type: "menuAction",
+                            token: menuToken,
+                            slot: item.slot,
+                            clickType: clickType,
+                        });
+                        
+                        const clickName = clickType === "right" ? "derecho" : "izquierdo";
+                        appendLine(`[MENU] Click ${clickName} en slot ${item.slot}: ${item.displayName || item.name || "Elemento"}`, "system");
                     });
-                    appendLine(`[MENU] Click izquierdo en slot ${item.slot}: ${item.displayName || item.name || "Elemento"}`, "system");
                 });
                 menuGrid.appendChild(button);
             });
@@ -509,7 +617,7 @@
                 reconnectSocketTimer = null;
             }
 
-            ws = new WebSocket("ws://" + location.host);
+            ws = new WebSocket("ws://127.0.0.1:3000");
 
             ws.onopen = () => {
                 if (!manualSocketClose) {
@@ -524,12 +632,12 @@
                 try {
                     data = JSON.parse(e.data);
                 } catch {
-                    appendLine(String(e.data));
+                    appendLine(sanitizeVisibleText(String(e.data)));
                     return;
                 }
 
                 if (typeof data.type === "undefined") {
-                    appendLine(String(e.data));
+                    appendLine(sanitizeVisibleText(String(e.data)));
                     return;
                 }
 
@@ -606,7 +714,127 @@
             };
         }
 
-        connectSocket();
+        function startPanelSession() {
+            if (gameStarted) {
+                return;
+            }
+            gameStarted = true;
+            launcherOverlay.classList.add("hidden");
+            connectSocket();
+        }
+
+        function setLauncherStatus(text, isError = false) {
+            launcherStatus.textContent = text || "";
+            launcherStatus.dataset.kind = isError ? "error" : "ok";
+        }
+
+        function showLauncherView(view) {
+            launcherMainMenu.style.display = view === "main" ? "flex" : "none";
+            launcherPlayView.classList.toggle("visible", view === "play");
+            launcherConfigView.classList.toggle("visible", view === "config");
+            launcherInfoView.classList.toggle("visible", view === "info");
+            setLauncherStatus("");
+        }
+
+        async function openConfigView() {
+            showLauncherView("config");
+            if (!launcherAPI) return;
+            const cfg = await launcherAPI.getConfig();
+            document.getElementById("config-editor").value = JSON.stringify(cfg || {}, null, 2);
+        }
+
+        async function openInfoView() {
+            showLauncherView("info");
+            if (!launcherAPI) return;
+            const info = await launcherAPI.getInfo();
+            const text = [
+                `App: ${info.name}`,
+                `Version: ${info.version}`,
+                "",
+                "Creditos:",
+                ...(Array.isArray(info.credits) ? info.credits.map((line) => `- ${line}`) : []),
+                "",
+                "Funcionamiento:",
+                info.about || "",
+            ].join("\n");
+            document.getElementById("info-content").textContent = text;
+        }
+
+        async function bootContinue() {
+            if (!launcherAPI) {
+                startPanelSession();
+                return;
+            }
+            setLauncherStatus("Iniciando ultima sesion...");
+            const result = await launcherAPI.startContinue();
+            if (!result?.ok) {
+                setLauncherStatus(result?.error || "No se pudo iniciar.", true);
+                return;
+            }
+            startPanelSession();
+        }
+
+        async function bootNewProfile() {
+            if (!launcherAPI) {
+                startPanelSession();
+                return;
+            }
+            const payload = {
+                username: document.getElementById("new-username").value.trim(),
+                ip: document.getElementById("new-ip").value.trim(),
+                port: document.getElementById("new-port").value.trim(),
+                version: document.getElementById("new-version").value.trim(),
+            };
+            setLauncherStatus("Creando perfil y arrancando bot...");
+            const result = await launcherAPI.startNew(payload);
+            if (!result?.ok) {
+                setLauncherStatus(result?.error || "No se pudo crear el perfil.", true);
+                return;
+            }
+            startPanelSession();
+        }
+
+        function initLauncherMenu() {
+            document.getElementById("menu-play-btn").addEventListener("click", async () => {
+                showLauncherView("play");
+                if (launcherAPI) {
+                    const last = await launcherAPI.getLastProfile();
+                    if (last) {
+                        document.getElementById("new-username").value = last.username || "";
+                        document.getElementById("new-ip").value = last.ip || "";
+                        document.getElementById("new-port").value = String(last.port || 25565);
+                        document.getElementById("new-version").value = last.version || "";
+                    }
+                }
+            });
+            document.getElementById("menu-config-btn").addEventListener("click", openConfigView);
+            document.getElementById("menu-info-btn").addEventListener("click", openInfoView);
+            document.getElementById("play-back-btn").addEventListener("click", () => showLauncherView("main"));
+            document.getElementById("config-back-btn").addEventListener("click", () => showLauncherView("main"));
+            document.getElementById("info-back-btn").addEventListener("click", () => showLauncherView("main"));
+            document.getElementById("continue-last-btn").addEventListener("click", bootContinue);
+            document.getElementById("create-new-btn").addEventListener("click", () => {
+                document.getElementById("new-profile-form").classList.remove("hidden");
+            });
+            document.getElementById("start-new-profile-btn").addEventListener("click", bootNewProfile);
+            document.getElementById("save-config-btn").addEventListener("click", async () => {
+                if (!launcherAPI) return;
+                try {
+                    const parsed = JSON.parse(document.getElementById("config-editor").value);
+                    const result = await launcherAPI.saveConfig(parsed);
+                    if (!result?.ok) {
+                        setLauncherStatus(result?.error || "No se pudo guardar.", true);
+                        return;
+                    }
+                    setLauncherStatus("config.json guardado.");
+                } catch {
+                    setLauncherStatus("JSON invalido en configuracion.", true);
+                }
+            });
+            showLauncherView("main");
+        }
+
+        initLauncherMenu();
 
         menuSearch.addEventListener("input", () => {
             menuQuery = menuSearch.value || "";
@@ -625,8 +853,76 @@
             });
         });
 
+        menuCloseBtn.addEventListener("click", () => {
+            clearMenu();
+        });
+
+        inventoryButton.addEventListener("click", () => {
+            if (sidebarKicker.dataset.status === "offline") {
+                appendLine("[SISTEMA] No puedes ver el inventario porque el bot está desconectado.", "system");
+                return;
+            }
+            sendSocketMessage({
+                type: "inventoryRequest"
+            });
+        });
 
 
+
+
+        // Action Modal Functions
+        const actionModal = document.getElementById("action-modal");
+        const actionModalTitle = document.getElementById("action-modal-title");
+        const actionModalText = document.getElementById("action-modal-text");
+        const actionModalCloseBtn = document.getElementById("action-modal-close-btn");
+        const actionBtnLeft = document.getElementById("action-btn-left");
+        const actionBtnRight = document.getElementById("action-btn-right");
+        const actionBtnUse = document.getElementById("action-btn-use");
+        
+        let onActionSelected = null;
+
+        function showActionModal(item, callback) {
+            actionModalTitle.textContent = item.displayName || item.name || "Interactuar";
+            actionModalText.textContent = `¿Cómo deseas hacer clic en ${item.displayName || item.name || "este objeto"} (Slot ${item.slot})?`;
+            onActionSelected = callback;
+            actionModal.classList.add("visible");
+            actionModal.setAttribute("aria-hidden", "false");
+        }
+
+        function hideActionModal() {
+            actionModal.classList.remove("visible");
+            actionModal.setAttribute("aria-hidden", "true");
+            onActionSelected = null;
+        }
+
+        actionModalCloseBtn.addEventListener("click", hideActionModal);
+        
+        actionBtnLeft.addEventListener("click", () => {
+            if (typeof onActionSelected === "function") {
+                onActionSelected("left");
+            }
+            hideActionModal();
+        });
+
+        actionBtnRight.addEventListener("click", () => {
+            if (typeof onActionSelected === "function") {
+                onActionSelected("right");
+            }
+            hideActionModal();
+        });
+
+        actionBtnUse.addEventListener("click", () => {
+            if (typeof onActionSelected === "function") {
+                onActionSelected("use");
+            }
+            hideActionModal();
+        });
+
+        actionModal.addEventListener("click", (e) => {
+            if (e.target === actionModal) {
+                hideActionModal();
+            }
+        });
 
         input.addEventListener("keydown", e => {
             if (e.key === "ArrowUp") {

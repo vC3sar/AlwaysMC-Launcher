@@ -1,9 +1,6 @@
 const mineflayer = require("mineflayer");
 const readline = require("readline");
 const WebSocket = require("ws");
-const http = require("http");
-const fs = require("fs");
-const path = require("path");
 const ping = require("ping");
 const nbt = require("prismarine-nbt");
 const { words: ignoredMessages } = require("./config/ignore.json");
@@ -350,6 +347,14 @@ module.exports = function (profile) {
     return String(input);
   }
 
+  function sanitizeVisibleText(input) {
+    return String(input ?? "")
+      .replace(/\uFFFD+/g, "")
+      .replace(/[\u0000-\u001F\u007F]/g, " ")
+      .replace(/\s+/g, " ")
+      .trim();
+  }
+
   function simplifyNbt(tag) {
     if (!tag) {
       return null;
@@ -449,7 +454,7 @@ module.exports = function (profile) {
   }
 
   function emitChatLine(text, source = "chat") {
-    const line = String(text ?? "").trim();
+    const line = sanitizeVisibleText(text);
     if (!line || isIgnored(line)) {
       return;
     }
@@ -469,7 +474,7 @@ module.exports = function (profile) {
   }
 
   function sendLocalChatLine(text, origin = "console") {
-    const line = String(text ?? "").trim();
+    const line = sanitizeVisibleText(text);
     if (!line || isIgnored(line)) {
       return;
     }
@@ -536,10 +541,10 @@ module.exports = function (profile) {
     return {
       slot,
       name: baseName,
-      customName: customName || null,
-      displayName,
-      lore,
-      searchText,
+      customName: sanitizeVisibleText(customName) || null,
+      displayName: sanitizeVisibleText(displayName),
+      lore: Array.isArray(lore) ? lore.map(sanitizeVisibleText).filter(Boolean) : [],
+      searchText: sanitizeVisibleText(searchText),
       count: item.count || 1,
     };
   }
@@ -571,7 +576,7 @@ module.exports = function (profile) {
     return {
       token,
       windowId: window.id,
-      title: decodeMinecraftText(rawTitle || "Menú").trim(),
+      title: sanitizeVisibleText(decodeMinecraftText(rawTitle || "Menú")),
       slotCount: Array.isArray(rawSlots) ? rawSlots.length : 0,
       slots,
     };
@@ -713,47 +718,11 @@ module.exports = function (profile) {
     sendLocalChatLine(input, "console");
   });
 
-  //manage chat from websocket
-  const server = http.createServer((req, res) => {
-    const requestUrl = new URL(req.url || "/", "http://localhost");
-    const route = requestUrl.pathname === "/" ? "/index.html" : requestUrl.pathname;
-
-    const fileMap = {
-      "/index.html": {
-        file: path.join(__dirname, "index.html"),
-        contentType: "text/html; charset=utf-8",
-      },
-      "/css/main.css": {
-        file: path.join(__dirname, "css", "main.css"),
-        contentType: "text/css; charset=utf-8",
-      },
-    };
-
-    const asset = fileMap[route];
-    if (!asset) {
-      res.writeHead(404, { "Content-Type": "text/plain; charset=utf-8" });
-      return res.end("Not found");
-    }
-
-    fs.readFile(asset.file, (err, data) => {
-      if (err) {
-        res.writeHead(500, { "Content-Type": "text/plain; charset=utf-8" });
-        return res.end(`Error cargando ${route}`);
-      }
-      res.writeHead(200, {
-        "Content-Type": asset.contentType,
-        "Cache-Control": "no-store",
-      });
-      res.end(data);
-    });
+  // WebSocket local para el panel Electron (sin servir UI por HTTP)
+  const wss = new WebSocket.Server({ port: 3000 });
+  wss.on("listening", () => {
+    console.log("🔌 WebSocket local del panel en ws://127.0.0.1:3000");
   });
-
-  server.listen(3000, () =>
-    console.log("🌐 Servidor HTTP en http://localhost:3000")
-  );
-
-  // WebSocket
-  const wss = new WebSocket.Server({ server });
   wss.on("connection", (ws) => {
     console.log("✅ Cliente web conectado");
     webClients.add(ws);
@@ -802,6 +771,28 @@ module.exports = function (profile) {
           return;
         }
 
+        if (data && data.type === "inventoryRequest") {
+          if (!bot || !botReady) {
+            return;
+          }
+
+          const items = bot.inventory.items();
+          const slots = items
+            .map((item) => serializeItem(item, item.slot))
+            .filter(Boolean);
+
+          const customMenu = {
+            token: "personal-inventory-" + Date.now(),
+            windowId: "inventory",
+            title: "Inventario del Bot",
+            slotCount: 36,
+            slots,
+          };
+
+          ws.send(JSON.stringify({ type: "menu", menu: customMenu }));
+          return;
+        }
+
         if (data && data.type === "menuAction") {
           if (!activeMenu || data.token !== activeMenu.token) {
             return;
@@ -818,6 +809,46 @@ module.exports = function (profile) {
 
           const clickType = String(data.clickType || "left").toLowerCase();
           const mouseButton = clickType === "right" ? 1 : 0;
+
+          if (activeMenu.windowId === "inventory") {
+            try {
+              if (clickType === "use") {
+                const item = bot.inventory.items().find(i => i.slot === slot);
+                if (item) {
+                  bot.equip(item, 'hand')
+                    .then(() => {
+                      bot.activateItem(false);
+                    })
+                    .catch((err) => {
+                      console.log("❌ Error equipando ítem:", err);
+                    });
+                }
+                return;
+              }
+
+              bot.clickWindow(slot, mouseButton, 0);
+
+              // Enviar el inventario actualizado al cliente
+              setTimeout(() => {
+                if (!bot || !botReady) return;
+                const items = bot.inventory.items();
+                const slots = items
+                  .map((item) => serializeItem(item, item.slot))
+                  .filter(Boolean);
+                const customMenu = {
+                  token: activeMenu.token,
+                  windowId: "inventory",
+                  title: "Inventario del Bot",
+                  slotCount: 36,
+                  slots,
+                };
+                ws.send(JSON.stringify({ type: "menu", menu: customMenu }));
+              }, 200);
+            } catch (error) {
+              console.log("❌ Error al hacer click en el inventario personal:", error);
+            }
+            return;
+          }
 
           if (!bot.currentWindow) {
             return;
@@ -880,9 +911,8 @@ module.exports = function (profile) {
 
     // JOIN A SERVER MODE
     currentBot.on("windowOpen", (window) => {
-      const parsedTitle = decodeMinecraftText(window.title).trim();
+      const parsedTitle = sanitizeVisibleText(decodeMinecraftText(window.title));
       console.log(`📂 Menú abierto: ${parsedTitle || "[sin titulo]"}`);
-      console.dir(window.title, { depth: null, colors: true });
       menuTransitionLocked = false;
       setMenuTransitionLocked(false);
       attachWindowRealtime(window);
@@ -958,8 +988,8 @@ module.exports = function (profile) {
       }
       console.log(
         "❌ Kicked:",
-        decodeMinecraftText(reason),
-        JSON.stringify(reason),
+        sanitizeVisibleText(decodeMinecraftText(reason)),
+        sanitizeVisibleText(JSON.stringify(reason)),
         "(loggedIn:",
         loggedIn,
         ")"
@@ -977,7 +1007,7 @@ module.exports = function (profile) {
       if (!wasReady && scheduleVersionRetry("disconnect-before-spawn")) {
         return;
       }
-      console.log(`🔌 Session closed: ${reason}`);
+      console.log(`🔌 Session closed: ${sanitizeVisibleText(reason)}`);
     });
 
     currentBot.on("error", (err) => {
