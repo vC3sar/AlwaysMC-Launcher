@@ -81,7 +81,10 @@
                 </div>
                 <button id="reconnect-button" type="button">Reconectar</button>
             </div>
-            <input type="text" id="input" placeholder="Escribe y presiona Enter">
+            <div class="chat-controls">
+                <input type="text" id="input" placeholder="Escribe y presiona Enter">
+                <button id="inventory-button" type="button" class="btn-inventory-mini" title="Ver inventario" aria-label="Ver inventario">🎒</button>
+            </div>
         </div>
 
         <!-- Columna derecha: Info -->
@@ -115,19 +118,6 @@
                 <div class="card-metric">
                     <span class="metric-label">Versión</span>
                     <span class="metric-value" id="version">Obteniendo...</span>
-                </div>
-            </div>
-
-            <div class="card">
-                <div class="card-head">
-                    <div class="card-icon">🎒</div>
-                    <div>
-                        <h3>Inventario</h3>
-                        <div class="card-subtitle">Objetos guardados</div>
-                    </div>
-                </div>
-                <div style="padding-top: 10px; border-top: 1px solid rgba(255, 255, 255, 0.05); display: flex; justify-content: center;">
-                    <button id="inventory-button" type="button" class="btn-inventory">Ver Inventario</button>
                 </div>
             </div>
 
@@ -201,7 +191,7 @@
     </div>
 
 <script>
-        const launcherAPI = window.launcherAPI || null;
+        var launcherAPI = window.launcherAPI || null;
         let ws = null;
         let reconnectSocketTimer = null;
         let manualSocketClose = false;
@@ -876,6 +866,14 @@
                 appendLine("[SISTEMA] No puedes ver el inventario porque el bot está desconectado.", "system");
                 return;
             }
+
+            if (!ws || ws.readyState !== WebSocket.OPEN) {
+                appendLine("[SISTEMA] El panel no esta conectado. Reintentando conexion...", "system");
+                connectSocket();
+                return;
+            }
+
+            clearMenu();
             sendSocketMessage({
                 type: "inventoryRequest"
             });
