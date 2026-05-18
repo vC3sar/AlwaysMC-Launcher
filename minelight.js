@@ -144,19 +144,25 @@ module.exports = function (profile) {
     prunePendingOutboundEchoes();
   }
 
-  function consumeOutboundEcho(text) {
+  function consumeOutboundEcho(text, { fuzzy = false } = {}) {
     const key = normalizeChatKey(text);
-    if (!key) {
-      return false;
-    }
-
     prunePendingOutboundEchoes();
-    if (!pendingOutboundEchoes.has(key)) {
-      return false;
+
+    if (key && pendingOutboundEchoes.has(key)) {
+      pendingOutboundEchoes.delete(key);
+      return true;
     }
 
-    pendingOutboundEchoes.delete(key);
-    return true;
+    if (fuzzy && key) {
+      for (const pendingKey of pendingOutboundEchoes.keys()) {
+        if (pendingKey && key.includes(pendingKey)) {
+          pendingOutboundEchoes.delete(pendingKey);
+          return true;
+        }
+      }
+    }
+
+    return false;
   }
 
   function pushChatHistory(entry) {
@@ -481,8 +487,6 @@ module.exports = function (profile) {
 
     markOutboundEcho(line);
     console.log(`[CHAT:${origin}] ${line}`);
-    pushChatHistory({ text: line, source: "player" });
-    broadcast({ type: "chat", text: line, source: "player" });
 
     if (!botReady) {
       pendingOutboundMessages.push(line);
@@ -956,14 +960,24 @@ module.exports = function (profile) {
 
     // CHAT HANDLER
 
-    currentBot.on("chat", (username, message) => {
-      if (username === currentBot.username) return;
-      emitChatLine(`${username}: ${message}`, "player");
+    currentBot.on("chat", (senderUsername, message) => {
+      emitChatLine(`${senderUsername}: ${message}`, "player");
     });
 
     currentBot.on("messagestr", (message, position) => {
-      if (position === "chat") return;
-      emitChatLine(message, "server");
+      const cleanMessage = sanitizeVisibleText(message);
+      if (!cleanMessage) {
+        return;
+      }
+
+      if (position === "chat") {
+        if (consumeOutboundEcho(cleanMessage, { fuzzy: true })) {
+          emitChatLine(cleanMessage, "player");
+        }
+        return;
+      }
+
+      emitChatLine(cleanMessage, "server");
     });
 
     // OPTIONS

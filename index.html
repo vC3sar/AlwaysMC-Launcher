@@ -402,11 +402,6 @@
                 return;
             }
 
-            if (kind === "player" && !/^[^:]+:\s/.test(text)) {
-                const localUsername = sanitizeVisibleText(document.getElementById("username")?.textContent || "TuUsuario");
-                text = `${localUsername}: ${text}`;
-            }
-
             const wasAtBottom = chat.scrollTop + chat.clientHeight >= chat.scrollHeight - 50;
             const line = document.createElement("div");
             line.textContent = text;
