@@ -794,8 +794,17 @@
             startPanelSession();
         }
 
+        function bindClick(id, handler) {
+            const node = document.getElementById(id);
+            if (!node) {
+                console.error(`[Launcher] No existe el elemento #${id}`);
+                return;
+            }
+            node.addEventListener("click", handler);
+        }
+
         function initLauncherMenu() {
-            document.getElementById("menu-play-btn").addEventListener("click", async () => {
+            bindClick("menu-play-btn", async () => {
                 showLauncherView("play");
                 if (launcherAPI) {
                     const last = await launcherAPI.getLastProfile();
@@ -807,17 +816,17 @@
                     }
                 }
             });
-            document.getElementById("menu-config-btn").addEventListener("click", openConfigView);
-            document.getElementById("menu-info-btn").addEventListener("click", openInfoView);
-            document.getElementById("play-back-btn").addEventListener("click", () => showLauncherView("main"));
-            document.getElementById("config-back-btn").addEventListener("click", () => showLauncherView("main"));
-            document.getElementById("info-back-btn").addEventListener("click", () => showLauncherView("main"));
-            document.getElementById("continue-last-btn").addEventListener("click", bootContinue);
-            document.getElementById("create-new-btn").addEventListener("click", () => {
+            bindClick("menu-config-btn", openConfigView);
+            bindClick("menu-info-btn", openInfoView);
+            bindClick("play-back-btn", () => showLauncherView("main"));
+            bindClick("config-back-btn", () => showLauncherView("main"));
+            bindClick("info-back-btn", () => showLauncherView("main"));
+            bindClick("continue-last-btn", bootContinue);
+            bindClick("create-new-btn", () => {
                 document.getElementById("new-profile-form").classList.remove("hidden");
             });
-            document.getElementById("start-new-profile-btn").addEventListener("click", bootNewProfile);
-            document.getElementById("save-config-btn").addEventListener("click", async () => {
+            bindClick("start-new-profile-btn", bootNewProfile);
+            bindClick("save-config-btn", async () => {
                 if (!launcherAPI) return;
                 try {
                     const parsed = JSON.parse(document.getElementById("config-editor").value);
@@ -834,7 +843,12 @@
             showLauncherView("main");
         }
 
-        initLauncherMenu();
+        try {
+            initLauncherMenu();
+        } catch (error) {
+            console.error("[Launcher] Error inicializando menú:", error);
+            setLauncherStatus("Error inicializando el menu. Abre Debug/DevTools.", true);
+        }
 
         menuSearch.addEventListener("input", () => {
             menuQuery = menuSearch.value || "";

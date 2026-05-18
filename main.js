@@ -1,4 +1,4 @@
-const { app, BrowserWindow, ipcMain } = require("electron");
+const { app, BrowserWindow, ipcMain, Menu } = require("electron");
 const fs = require("fs");
 const path = require("path");
 
@@ -100,7 +100,7 @@ function createWindow() {
     minWidth: 1100,
     minHeight: 720,
     backgroundColor: "#08080b",
-    autoHideMenuBar: true,
+    autoHideMenuBar: app.isPackaged,
     webPreferences: {
       preload: path.join(__dirname, "preload.js"),
       contextIsolation: true,
@@ -109,6 +109,28 @@ function createWindow() {
   });
 
   win.loadFile(path.join(__dirname, "index.html"));
+
+  if (!app.isPackaged) {
+    const devMenu = Menu.buildFromTemplate([
+      {
+        label: "Desarrollo",
+        submenu: [
+          { role: "reload", label: "Reload" },
+          { role: "forceReload", label: "Force Reload" },
+          { type: "separator" },
+          { role: "toggleDevTools", label: "Debug / DevTools" },
+        ],
+      },
+      {
+        label: "Ventana",
+        submenu: [{ role: "minimize" }, { role: "close" }],
+      },
+    ]);
+    Menu.setApplicationMenu(devMenu);
+    win.setMenuBarVisibility(true);
+  } else {
+    Menu.setApplicationMenu(null);
+  }
 }
 
 ipcMain.handle("launcher:getLastProfile", () => loadProfile());
