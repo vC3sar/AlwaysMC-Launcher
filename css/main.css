@@ -14,15 +14,22 @@ body {
     z-index: 20000;
     display: flex;
     align-items: center;
-    justify-content: center;
-    background:
-        radial-gradient(circle at 20% 15%, rgba(161, 19, 19, 0.22), transparent 32%),
-        radial-gradient(circle at 82% 70%, rgba(93, 13, 13, 0.26), transparent 36%),
-        linear-gradient(180deg, rgba(14, 10, 10, 0.95), rgba(3, 3, 5, 0.98));
+    justify-content: flex-start;
+    padding-left: clamp(24px, 6vw, 88px);
+    overflow: hidden;
 }
 
 .launcher-overlay.hidden {
     display: none;
+}
+
+.launcher-bg-video {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    z-index: 0;
 }
 
 .launcher-shell {
@@ -32,6 +39,8 @@ body {
     padding: 24px;
     background: rgba(8, 8, 10, 0.86);
     box-shadow: 0 30px 80px rgba(0, 0, 0, 0.62);
+    position: relative;
+    z-index: 1;
 }
 
 .launcher-brand {

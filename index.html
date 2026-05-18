@@ -27,6 +27,12 @@
 
 <body>
     <div id="launcher-overlay" class="launcher-overlay">
+        <video class="launcher-bg-video" autoplay muted loop playsinline>
+            <source src="mp4/menu-main.mp4" type="video/mp4">
+        </video>
+        <audio id="launcher-menu-audio" loop>
+            <source src="mp3/main-menu.mp3" type="audio/mpeg">
+        </audio>
         <div class="launcher-shell">
             <div class="launcher-brand">MC-BETA</div>
             <div class="launcher-sub">Modo Electron</div>
@@ -213,6 +219,7 @@
         const menuCloseBtn = document.getElementById("menu-close-btn");
         const inventoryButton = document.getElementById("inventory-button");
         const launcherOverlay = document.getElementById("launcher-overlay");
+        const launcherMenuAudio = document.getElementById("launcher-menu-audio");
         const launcherStatus = document.getElementById("launcher-status");
         const launcherMainMenu = document.getElementById("launcher-main-menu");
         const launcherPlayView = document.getElementById("launcher-play-view");
@@ -709,6 +716,10 @@
                 return;
             }
             gameStarted = true;
+            if (launcherMenuAudio) {
+                launcherMenuAudio.pause();
+                launcherMenuAudio.currentTime = 0;
+            }
             launcherOverlay.classList.add("hidden");
             connectSocket();
         }
@@ -838,6 +849,19 @@
         } catch (error) {
             console.error("[Launcher] Error inicializando menú:", error);
             setLauncherStatus("Error inicializando el menu. Abre Debug/DevTools.", true);
+        }
+
+        if (launcherMenuAudio) {
+            const tryPlayMenuAudio = () => {
+                if (gameStarted) return;
+                launcherMenuAudio.volume = 0.35;
+                launcherMenuAudio.play().catch(() => {
+                    // Espera a primera interacción si autoplay es bloqueado.
+                });
+            };
+            tryPlayMenuAudio();
+            document.addEventListener("click", tryPlayMenuAudio, { once: true });
+            document.addEventListener("keydown", tryPlayMenuAudio, { once: true });
         }
 
         menuSearch.addEventListener("input", () => {
