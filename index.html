@@ -16,6 +16,7 @@
         body {
             min-height: 100vh;
             height: auto;
+            visibility: hidden;
         }
 
         #container {
@@ -31,6 +32,9 @@
         <audio id="launcher-menu-audio" loop>
             <source src="mp3/main-menu.mp3" type="audio/mpeg">
         </audio>
+        <button id="launcher-audio-toggle" class="launcher-audio-toggle" type="button" aria-label="Silenciar música" title="Silenciar música">
+            <i data-lucide="volume-2"></i>
+        </button>
         <div class="launcher-shell">
             <div class="launcher-brand">MC-BETA</div>
             <div class="launcher-sub">Modo Electron</div>
@@ -120,6 +124,18 @@
     <div id="container">
         <!-- Columna izquierda: Chat -->
         <div id="chat-section">
+            <div id="vitals-hud" class="vitals-hud">
+                <div class="vital-card">
+                    <span class="vital-icon" aria-hidden="true">❤️</span>
+                    <span class="vital-label">Vida</span>
+                    <span class="vital-value" id="hud-health">--/20</span>
+                </div>
+                <div class="vital-card">
+                    <span class="vital-icon" aria-hidden="true">🍗</span>
+                    <span class="vital-label">Comida</span>
+                    <span class="vital-value" id="hud-food">--/20</span>
+                </div>
+            </div>
             <div id="chat" style="overflow-wrap: anywhere;"></div>
             <div id="reconnect-panel">
                 <div class="reconnect-copy">
@@ -240,6 +256,7 @@
         </div>
     </div>
 
+    <script src="https://unpkg.com/lucide@latest"></script>
     <script>
         var launcherAPI = window.launcherAPI || null;
         let ws = null;
@@ -262,10 +279,13 @@
         const sidebarKicker = document.querySelector(".sidebar-kicker");
         const menuCloseBtn = document.getElementById("menu-close-btn");
         const inventoryButton = document.getElementById("inventory-button");
+        const hudHealth = document.getElementById("hud-health");
+        const hudFood = document.getElementById("hud-food");
         const launcherOverlay = document.getElementById("launcher-overlay");
         const launcherBgVideo = document.getElementById("launcher-bg-video");
         const bgVideoModeSelect = document.getElementById("bg-video-mode-select");
         const launcherMenuAudio = document.getElementById("launcher-menu-audio");
+        const launcherAudioToggle = document.getElementById("launcher-audio-toggle");
         const launcherStatus = document.getElementById("launcher-status");
         const launcherMainMenu = document.getElementById("launcher-main-menu");
         const launcherPlayView = document.getElementById("launcher-play-view");
@@ -285,6 +305,7 @@
         let cachedLauncherConfig = {};
         let currentBgVideoMode = "auto";
         let currentBgVideoSrc = "";
+        let menuAudioMuted = false;
 
         const BG_1080_SRC = "mp4/menu-main.mp4";
         const BG_2K_SRC = "mp4/2k-menu-main.mp4";
@@ -343,6 +364,47 @@
                 .replace(/[\u0000-\u001F\u007F]/g, " ")
                 .replace(/\s+/g, " ")
                 .trim();
+        }
+
+        function formatVital(value) {
+            const n = Number(value);
+            if (!Number.isFinite(n)) {
+                return "--/20";
+            }
+            const clamped = Math.max(0, Math.min(20, Math.round(n)));
+            return `${clamped}/20`;
+        }
+
+        function setVitals(health, food) {
+            if (hudHealth) {
+                hudHealth.textContent = formatVital(health);
+            }
+            if (hudFood) {
+                hudFood.textContent = formatVital(food);
+            }
+        }
+
+        function revealWindowWhenMenuReady() {
+            document.body.style.visibility = "visible";
+            if (launcherAPI && typeof launcherAPI.menuReady === "function") {
+                launcherAPI.menuReady().catch(() => { });
+            }
+        }
+
+        function updateMenuAudioToggle() {
+            if (!launcherAudioToggle || !launcherMenuAudio) {
+                return;
+            }
+            launcherMenuAudio.muted = menuAudioMuted;
+            launcherAudioToggle.innerHTML = `<i data-lucide="${menuAudioMuted ? "volume-x" : "volume-2"}"></i>`;
+            launcherAudioToggle.setAttribute("aria-label", menuAudioMuted ? "Activar música" : "Silenciar música");
+            launcherAudioToggle.setAttribute("title", menuAudioMuted ? "Activar música" : "Silenciar música");
+            if (window.lucide && typeof window.lucide.createIcons === "function") {
+                window.lucide.createIcons({
+                    icons: window.lucide.icons,
+                    attrs: { width: 17, height: 17, "stroke-width": 2.2 }
+                });
+            }
         }
 
         function pushInputHistory(value) {
@@ -738,6 +800,7 @@
                     document.getElementById('time').textContent = data.time;
                     document.getElementById('server').textContent = data.server;
                     document.getElementById('port').textContent = data.port || '25565';
+                    setVitals(data.health, data.food);
                     setBotStatus(data.botStatus);
                     if (data.sessionId && data.sessionId !== currentSessionId) {
                         resetChatHistory(data.sessionId, Array.isArray(data.chatHistory) ? data.chatHistory : []);
@@ -755,6 +818,9 @@
                 }
                 else if (data.type == "updatePing") {
                     document.getElementById('ping').textContent = data.ping + ' ms';
+                }
+                else if (data.type == "vitals") {
+                    setVitals(data.health, data.food);
                 }
                 else if (data.type == "chat") {
                     const prefix = data.source === "player" ? "[CHAT]" : data.source === "system" ? "[SYSTEM]" : "[SERVER]";
@@ -1027,6 +1093,14 @@
             document.addEventListener("keydown", tryPlayMenuAudio, { once: true });
         }
 
+        if (launcherAudioToggle) {
+            launcherAudioToggle.addEventListener("click", () => {
+                menuAudioMuted = !menuAudioMuted;
+                updateMenuAudioToggle();
+            });
+        }
+        updateMenuAudioToggle();
+
         if (launcherAPI) {
             launcherAPI.getConfig().then((cfg) => {
                 cachedLauncherConfig = cfg || {};
@@ -1060,6 +1134,8 @@
                 }
             });
         }
+
+        revealWindowWhenMenuReady();
 
         document.addEventListener("keydown", (event) => {
             if (event.key === "F11") {

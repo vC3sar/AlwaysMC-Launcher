@@ -7,6 +7,7 @@ const PROFILE_FILE = path.join(__dirname, "profiles.json");
 const CONFIG_FILE = path.join(__dirname, "config.json");
 
 let botStarted = false;
+let mainWindow = null;
 
 function parseHostAndPort(hostInput, portInput) {
   const rawHost = String(hostInput ?? "").trim();
@@ -95,6 +96,7 @@ function appInfo() {
 
 function createWindow() {
   const win = new BrowserWindow({
+    show: false,
     width: 1360,
     height: 860,
     minWidth: 1100,
@@ -107,6 +109,7 @@ function createWindow() {
       nodeIntegration: false,
     },
   });
+  mainWindow = win;
 
   win.loadFile(path.join(__dirname, "index.html"));
 
@@ -175,6 +178,12 @@ ipcMain.handle("launcher:saveConfig", (_, config) => {
   }
 });
 ipcMain.handle("launcher:getInfo", () => appInfo());
+ipcMain.handle("launcher:menuReady", () => {
+  if (mainWindow && !mainWindow.isDestroyed() && !mainWindow.isVisible()) {
+    mainWindow.show();
+  }
+  return { ok: true };
+});
 ipcMain.handle("window:toggleFullscreen", () => {
   const win = getMainWindow();
   if (!win) return { ok: false, isFullscreen: false };

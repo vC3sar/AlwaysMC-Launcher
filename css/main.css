@@ -23,6 +23,33 @@ body {
     display: none;
 }
 
+.launcher-audio-toggle {
+    position: absolute;
+    right: 18px;
+    bottom: 16px;
+    z-index: 2;
+    width: 34px;
+    height: 34px;
+    border-radius: 999px;
+    border: 1px solid rgba(255, 255, 255, 0.22);
+    background: rgba(0, 0, 0, 0.28);
+    color: #e8eef7;
+    font-size: 16px;
+    line-height: 1;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    opacity: 0.78;
+    transition: opacity 0.2s ease, background 0.2s ease, border-color 0.2s ease;
+}
+
+.launcher-audio-toggle:hover {
+    opacity: 1;
+    background: rgba(0, 0, 0, 0.4);
+    border-color: rgba(255, 255, 255, 0.35);
+}
+
 .launcher-bg-video {
     position: absolute;
     inset: 0;
@@ -103,6 +130,19 @@ body {
     display: grid;
     grid-template-columns: 1fr 1fr;
     gap: 10px;
+}
+
+#launcher-config-view .launcher-row:last-child {
+    width: 100%;
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 10px;
+}
+
+#launcher-config-view #save-config-btn,
+#launcher-config-view #config-back-btn {
+    width: 100%;
+    max-width: none;
 }
 
 #play-back-btn {
@@ -250,6 +290,43 @@ body {
     position: static;
 }
 
+.vitals-hud {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 10px;
+    margin-bottom: 10px;
+}
+
+.vital-card {
+    display: grid;
+    grid-template-columns: auto auto 1fr;
+    align-items: center;
+    gap: 8px;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    background: linear-gradient(180deg, rgba(23, 31, 39, 0.92), rgba(13, 19, 28, 0.92));
+    border-radius: 10px;
+    padding: 8px 10px;
+}
+
+.vital-icon {
+    font-size: 16px;
+    line-height: 1;
+}
+
+.vital-label {
+    font-size: 11px;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: #9fb0c5;
+}
+
+.vital-value {
+    justify-self: end;
+    font-size: 13px;
+    font-weight: 700;
+    color: #f8fafc;
+}
+
 #chat {
     font-family: monospace;
     white-space: pre-wrap;
@@ -353,9 +430,9 @@ body {
     width: 100%;
     height: 100%;
     min-height: 0;
-    padding: 0 18px 18px 18px;
-    margin-bottom: -18px;
-    margin-right: -18px;
+    min-width: 0;
+    padding: 0 0 18px 0;
+    margin: 0 clamp(16px, 4vw, 56px) 0 0;
     overflow-y: auto;
     color: #eef2ff;
     background: transparent;
@@ -864,7 +941,9 @@ body {
         grid-row: 2;
         height: auto;
         min-height: 0;
-        padding: 18px;
+        width: 100%;
+        min-width: 0;
+        padding: 0;
         margin: 0;
     }
 
@@ -876,6 +955,11 @@ body {
 }
 
 @media (max-width: 700px) {
+    .vitals-hud {
+        grid-template-columns: 1fr;
+        gap: 8px;
+    }
+
     #chat {
         height: 360px;
         min-height: 360px;
@@ -924,9 +1008,8 @@ body {
     }
 
     #sidebar {
-        margin-bottom: -12px;
-        margin-right: -12px;
-        padding: 0 12px 12px 12px;
+        margin: 0 clamp(16px, 4vw, 56px) 0 0;
+        padding: 0 0 12px 0;
     }
 }
 

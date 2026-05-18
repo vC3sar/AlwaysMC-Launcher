@@ -56,6 +56,7 @@ module.exports = function (profile) {
   }
 
   const webClients = new Set();
+  const personalInventoryTokens = new Map();
   const recentChatLines = new Map();
   const pendingOutboundEchoes = new Map();
   const chatHistory = [];
@@ -71,6 +72,8 @@ module.exports = function (profile) {
   let botStatus = "offline";
   let reconnectInProgress = false;
   let reconnectTimer = null;
+  let currentHealth = null;
+  let currentFood = null;
   const pendingOutboundMessages = [];
   const DEDUPE_WINDOW_MS = 750;
   const CHAT_HISTORY_LIMIT = 300;
@@ -199,6 +202,24 @@ module.exports = function (profile) {
       sessionId,
       chatHistory,
       botStatus,
+      health: currentHealth,
+      food: currentFood,
+    });
+  }
+
+  function extractVitals() {
+    const healthValue = Number(bot?.health);
+    const foodValue = Number(bot?.food);
+    currentHealth = Number.isFinite(healthValue) ? Math.max(0, Math.min(20, Math.round(healthValue))) : null;
+    currentFood = Number.isFinite(foodValue) ? Math.max(0, Math.min(20, Math.round(foodValue))) : null;
+  }
+
+  function broadcastVitals() {
+    extractVitals();
+    broadcast({
+      type: "vitals",
+      health: currentHealth,
+      food: currentFood,
     });
   }
 
@@ -553,6 +574,78 @@ module.exports = function (profile) {
     };
   }
 
+  function getArmorDestination(itemName) {
+    const normalized = String(itemName || "").toLowerCase();
+    if (!normalized) return null;
+    if (normalized.includes("helmet") || normalized.includes("skull") || normalized.includes("head")) return "head";
+    if (normalized.includes("chestplate") || normalized.includes("elytra")) return "torso";
+    if (normalized.includes("leggings")) return "legs";
+    if (normalized.includes("boots")) return "feet";
+    return null;
+  }
+
+  function isLikelyFood(itemName) {
+    const normalized = String(itemName || "").toLowerCase();
+    if (!normalized) return false;
+
+    const foodTokens = [
+      "apple",
+      "bread",
+      "beef",
+      "chicken",
+      "cod",
+      "salmon",
+      "mutton",
+      "porkchop",
+      "rabbit",
+      "potato",
+      "carrot",
+      "beetroot",
+      "cookie",
+      "melon_slice",
+      "sweet_berries",
+      "glow_berries",
+      "golden_apple",
+      "enchanted_golden_apple",
+      "stew",
+      "soup",
+      "pumpkin_pie",
+      "chorus_fruit",
+      "dried_kelp",
+      "honey_bottle",
+      "rotten_flesh",
+    ];
+
+    return foodTokens.some((token) => normalized.includes(token));
+  }
+
+  function sendInventorySnapshot(ws, tokenOverride = null) {
+    if (!ws || ws.readyState !== WebSocket.OPEN || !bot || !botReady) {
+      return;
+    }
+
+    const items = bot.inventory.items();
+    const slots = items
+      .map((item) => serializeItem(item, item.slot))
+      .filter(Boolean);
+
+    const token = tokenOverride || (activeMenu && activeMenu.token) || ("personal-inventory-" + Date.now());
+    ws.send(
+      JSON.stringify({
+        type: "menu",
+        menu: {
+          token,
+          windowId: "inventory",
+          title: "Inventario del Bot",
+          slotCount: 36,
+          slots,
+        },
+      })
+    );
+
+    personalInventoryTokens.set(ws, token);
+  }
+
   function serializeMenu(window, token) {
     if (!window) {
       return null;
@@ -742,6 +835,8 @@ module.exports = function (profile) {
         sessionId,
         chatHistory,
         botStatus,
+        health: currentHealth,
+        food: currentFood,
       })
     );
 
@@ -779,33 +874,12 @@ module.exports = function (profile) {
           if (!bot || !botReady) {
             return;
           }
-
-          const items = bot.inventory.items();
-          const slots = items
-            .map((item) => serializeItem(item, item.slot))
-            .filter(Boolean);
-
-          const customMenu = {
-            token: "personal-inventory-" + Date.now(),
-            windowId: "inventory",
-            title: "Inventario del Bot",
-            slotCount: 36,
-            slots,
-          };
-
-          ws.send(JSON.stringify({ type: "menu", menu: customMenu }));
+          const inventoryToken = "personal-inventory-" + Date.now();
+          sendInventorySnapshot(ws, inventoryToken);
           return;
         }
 
         if (data && data.type === "menuAction") {
-          if (!activeMenu || data.token !== activeMenu.token) {
-            return;
-          }
-
-          if (menuTransitionLocked) {
-            return;
-          }
-
           const slot = Number(data.slot);
           if (!Number.isInteger(slot) || slot < 0) {
             return;
@@ -813,19 +887,61 @@ module.exports = function (profile) {
 
           const clickType = String(data.clickType || "left").toLowerCase();
           const mouseButton = clickType === "right" ? 1 : 0;
+          const personalInventoryToken = personalInventoryTokens.get(ws);
+          const isPersonalInventoryAction = Boolean(
+            personalInventoryToken &&
+            data.token === personalInventoryToken
+          );
 
-          if (activeMenu.windowId === "inventory") {
+          if (isPersonalInventoryAction) {
+            if (!bot || !botReady) {
+              return;
+            }
+
             try {
               if (clickType === "use") {
-                const item = bot.inventory.items().find(i => i.slot === slot);
+                const item = bot.inventory.slots[slot] || bot.inventory.items().find(i => i.slot === slot);
                 if (item) {
-                  bot.equip(item, 'hand')
+                  const armorDestination = getArmorDestination(item.name);
+
+                  if (armorDestination) {
+                    bot.unequip(armorDestination)
+                      .catch(() => {
+                        // Puede estar vacío; ignorar.
+                      })
+                      .finally(() => {
+                        bot.equip(item, armorDestination).catch((err) => {
+                          console.log("❌ Error equipando armadura:", err);
+                        });
+                      });
+                    setTimeout(() => sendInventorySnapshot(ws, personalInventoryToken), 220);
+                    return;
+                  }
+
+                  if (isLikelyFood(item.name)) {
+                    bot.equip(item, "hand")
+                      .then(async () => {
+                        if (typeof bot.consume === "function") {
+                          await bot.consume();
+                        } else {
+                          bot.activateItem(false);
+                        }
+                      })
+                      .catch((err) => {
+                        console.log("❌ Error consumiendo comida:", err);
+                      });
+                    setTimeout(() => sendInventorySnapshot(ws, personalInventoryToken), 350);
+                    return;
+                  }
+
+                  bot.equip(item, "hand")
                     .then(() => {
                       bot.activateItem(false);
                     })
                     .catch((err) => {
                       console.log("❌ Error equipando ítem:", err);
                     });
+                  setTimeout(() => sendInventorySnapshot(ws, personalInventoryToken), 220);
                 }
                 return;
               }
@@ -833,24 +949,18 @@ module.exports = function (profile) {
               bot.clickWindow(slot, mouseButton, 0);
 
               // Enviar el inventario actualizado al cliente
-              setTimeout(() => {
-                if (!bot || !botReady) return;
-                const items = bot.inventory.items();
-                const slots = items
-                  .map((item) => serializeItem(item, item.slot))
-                  .filter(Boolean);
-                const customMenu = {
-                  token: activeMenu.token,
-                  windowId: "inventory",
-                  title: "Inventario del Bot",
-                  slotCount: 36,
-                  slots,
-                };
-                ws.send(JSON.stringify({ type: "menu", menu: customMenu }));
-              }, 200);
+              setTimeout(() => sendInventorySnapshot(ws, personalInventoryToken), 200);
             } catch (error) {
               console.log("❌ Error al hacer click en el inventario personal:", error);
             }
+            return;
+          }
+
+          if (!activeMenu || data.token !== activeMenu.token) {
+            return;
+          }
+
+          if (menuTransitionLocked) {
             return;
           }
 
@@ -886,6 +996,7 @@ module.exports = function (profile) {
     // Limpiar listeners al cerrar conexión
     ws.on("close", () => {
       webClients.delete(ws);
+      personalInventoryTokens.delete(ws);
       clearInterval(interval);
       console.log("❌ Cliente web desconectado");
     });
@@ -945,7 +1056,9 @@ module.exports = function (profile) {
       setMenuTransitionLocked(false);
       setPresence(`${ip} - ${getActiveVersion()}`);
       currentBot.settings.chat = "enabled";
+      extractVitals();
       broadcastSidebarState("online");
+      broadcastVitals();
       console.log(`✅ Conectado como ${currentBot.username}`);
       emitChatLine(`✅ Conectado como ${currentBot.username}`, "system");
       flushPendingOutboundMessages();
@@ -956,6 +1069,14 @@ module.exports = function (profile) {
 
     currentBot.once("login", () => {
       console.log("🔐 Login completado, esperando spawn...");
+    });
+
+    currentBot.on("health", () => {
+      broadcastVitals();
+    });
+
+    currentBot.on("respawn", () => {
+      broadcastVitals();
     });
 
     // CHAT HANDLER
@@ -1015,6 +1136,8 @@ module.exports = function (profile) {
       const wasReady = botReady;
       botReady = false;
       pendingOutboundMessages.length = 0;
+      currentHealth = null;
+      currentFood = null;
       broadcastSidebarState("offline");
       reconnectInProgress = false;
       clearReconnectTimer();
@@ -1037,6 +1160,8 @@ module.exports = function (profile) {
       const wasReady = botReady;
       botReady = false;
       pendingOutboundMessages.length = 0;
+      currentHealth = null;
+      currentFood = null;
       broadcastSidebarState("offline");
       reconnectInProgress = false;
       clearReconnectTimer();
