@@ -68,6 +68,10 @@ function mergeLauncherDefaults(raw) {
     downloads: {
       minecraftDir: String(launcher?.downloads?.minecraftDir || "").trim(),
       javaPath: String(launcher?.downloads?.javaPath || "").trim(),
+      minMemoryMb: Number.parseInt(String(launcher?.downloads?.minMemoryMb || "1024"), 10) || 1024,
+      maxMemoryMb: Number.parseInt(String(launcher?.downloads?.maxMemoryMb || "2048"), 10) || 2048,
+      extraJvmArgs: String(launcher?.downloads?.extraJvmArgs || "").trim(),
+      extraGameArgs: String(launcher?.downloads?.extraGameArgs || "").trim(),
     },
   };
   if (!cfg.auth || typeof cfg.auth !== "object") cfg.auth = {};

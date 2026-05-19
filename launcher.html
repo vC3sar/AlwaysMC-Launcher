@@ -56,44 +56,73 @@
         </div>
         <div id="play-tab-panel-java" class="launcher-play-panel" role="tabpanel" hidden>
           <div class="launcher-helper-text">Selecciona modo y versión, luego pulsa Lanzar.</div>
-          <div class="launcher-form">
-          <label for="game-auth-mode"><i data-lucide="key-round"></i><span>Modo de autenticación</span></label>
-          <select id="game-auth-mode">
-            <option value="offline">Offline</option>
-            <option value="microsoft">Microsoft (pendiente)</option>
-          </select>
+          <div class="launcher-form launcher-java-layout">
+            <section class="launcher-java-card">
+              <label for="game-auth-mode"><i data-lucide="key-round"></i><span>Modo de autenticación</span></label>
+              <select id="game-auth-mode">
+                <option value="offline">Offline</option>
+                <option value="microsoft">Microsoft (pendiente)</option>
+              </select>
 
-          <label for="game-distribution"><i data-lucide="layers"></i><span>Distribución</span></label>
-          <select id="game-distribution">
-            <option value="vanilla">Vanilla</option>
-            <option value="fabric">Fabric</option>
-            <option value="forge">Forge</option>
-          </select>
+              <label for="game-distribution"><i data-lucide="layers"></i><span>Distribución</span></label>
+              <select id="game-distribution">
+                <option value="vanilla">Vanilla</option>
+                <option value="fabric">Fabric</option>
+                <option value="forge">Forge</option>
+              </select>
 
-          <label for="game-version-select"><i data-lucide="list-tree"></i><span>Versión disponible</span></label>
-          <div id="game-version-type-filters" class="launcher-version-filters">
-            <label class="launcher-check"><input id="filter-release" type="checkbox" checked><span>Release</span></label>
-            <label class="launcher-check"><input id="filter-snapshot" type="checkbox"><span>Snapshot</span></label>
-            <label class="launcher-check"><input id="filter-old-beta" type="checkbox"><span>Old Beta</span></label>
-            <label class="launcher-check"><input id="filter-old-alpha" type="checkbox"><span>Old Alpha</span></label>
-          </div>
-          <select id="game-version-select"></select>
+              <label for="game-username"><i data-lucide="user-round"></i><span>Nickname (offline)</span></label>
+              <input id="game-username" type="text" placeholder="JugadorOffline">
+            </section>
 
-          <label for="game-username"><i data-lucide="user-round"></i><span>Nickname (offline)</span></label>
-          <input id="game-username" type="text" placeholder="JugadorOffline">
+            <section class="launcher-java-card">
+              <label for="game-version-select"><i data-lucide="list-tree"></i><span>Versión disponible</span></label>
+              <div id="game-version-type-filters" class="launcher-version-filters">
+                <label class="launcher-check"><input id="filter-release" type="checkbox" checked><span>Release</span></label>
+                <label class="launcher-check"><input id="filter-snapshot" type="checkbox"><span>Snapshot</span></label>
+                <label class="launcher-check"><input id="filter-old-beta" type="checkbox"><span>Old Beta</span></label>
+                <label class="launcher-check"><input id="filter-old-alpha" type="checkbox"><span>Old Alpha</span></label>
+              </div>
+              <select id="game-version-select"></select>
+            </section>
 
-          <label for="game-java-path"><i data-lucide="coffee"></i><span>Java path (opcional)</span></label>
-          <input id="game-java-path" type="text" placeholder="C:\\Program Files\\Java\\...\\bin\\javaw.exe">
+            <details id="game-advanced-section" class="launcher-advanced-toggle">
+              <summary><i data-lucide="sliders-horizontal"></i><span>Avanzado</span></summary>
+              <div class="launcher-advanced-body">
+                <label for="game-java-path"><i data-lucide="coffee"></i><span>Java path (opcional)</span></label>
+                <input id="game-java-path" type="text" placeholder="C:\\Program Files\\Java\\...\\bin\\javaw.exe">
 
-          <div class="launcher-row launcher-row-actions">
-            <button type="button" id="game-refresh-catalog-btn" class="launcher-btn alt"><i data-lucide="refresh-cw"></i><span>Actualizar catálogo</span></button>
-            <button type="button" id="game-scan-java-btn" class="launcher-link"><i data-lucide="search-check"></i><span>Detectar Java</span></button>
-          </div>
-          <div class="launcher-row launcher-row-actions">
-            <button type="button" id="game-launch-btn" class="launcher-btn"><i data-lucide="play"></i><span>Lanzar juego</span></button>
-            <button type="button" id="game-stop-btn" class="launcher-link"><i data-lucide="square"></i><span>Cerrar juego</span></button>
-          </div>
-          <div id="game-install-status" class="launcher-status" data-kind="ok"></div>
+                <div class="launcher-advanced-memory">
+                  <div>
+                    <label for="game-min-memory-mb"><i data-lucide="memory-stick"></i><span>Memoria mínima (MB)</span></label>
+                    <input id="game-min-memory-mb" type="number" min="512" step="256" placeholder="1024">
+                  </div>
+                  <div>
+                    <label for="game-max-memory-mb"><i data-lucide="memory-stick"></i><span>Memoria máxima (MB)</span></label>
+                    <input id="game-max-memory-mb" type="number" min="1024" step="256" placeholder="2048">
+                  </div>
+                </div>
+
+                <label for="game-extra-jvm-args"><i data-lucide="terminal-square"></i><span>Args JVM extra</span></label>
+                <input id="game-extra-jvm-args" type="text" placeholder="-XX:+UseG1GC -XX:+UnlockExperimentalVMOptions">
+
+                <label for="game-extra-game-args"><i data-lucide="command"></i><span>Args de juego extra</span></label>
+                <input id="game-extra-game-args" type="text" placeholder="--quickPlaySingleplayer Mundo1">
+
+                <button type="button" id="game-scan-java-btn" class="launcher-link"><i data-lucide="search-check"></i><span>Detectar Java</span></button>
+              </div>
+            </details>
+
+            <div class="launcher-row launcher-row-actions launcher-java-tools">
+            </div>
+            <div class="launcher-row launcher-row-actions launcher-java-main-actions">
+              <button type="button" id="game-launch-btn" class="launcher-btn"><i data-lucide="play"></i><span>Lanzar juego</span></button>
+              <button type="button" id="game-stop-btn" class="launcher-link"><i data-lucide="square"></i><span>Cerrar juego</span></button>
+            </div>
+            <div class="launcher-status-wrap">
+              <div id="game-install-status" class="launcher-status launcher-status-terminal" data-kind="ok"></div>
+              <button type="button" id="game-show-diagnostics-btn" class="launcher-status-icon-side-btn" aria-label="Ver diagnóstico" title="Ver diagnóstico"><i data-lucide="stethoscope"></i></button>
+            </div>
           </div>
         </div>
         <button type="button" id="play-back-btn" class="launcher-link">Volver</button>

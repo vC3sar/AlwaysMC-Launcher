@@ -145,6 +145,10 @@ body::-webkit-scrollbar-corner,
     width: min(400px, 88vw);
 }
 
+.launcher-shell.java-expanded {
+    width: min(980px, 94vw);
+}
+
 .launcher-brand {
     font-size: 38px;
     letter-spacing: 0.06em;
@@ -309,6 +313,155 @@ body::-webkit-scrollbar-corner,
     width: 100%;
 }
 
+#play-tab-panel-java {
+    width: 100%;
+}
+
+#play-tab-panel-java .launcher-helper-text {
+    margin-bottom: 10px;
+    font-size: 13px;
+}
+
+.launcher-java-layout {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 12px;
+}
+
+.launcher-java-card {
+    border: 1px solid rgba(177, 133, 102, 0.28);
+    background: rgba(0, 0, 0, 0.24);
+    border-radius: 10px;
+    padding: 12px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    min-width: 0;
+}
+
+.launcher-java-card #game-version-select {
+    min-height: 42px;
+}
+
+.launcher-java-tools {
+    grid-column: 1 / -1;
+    grid-template-columns: 1fr !important;
+}
+
+.launcher-java-main-actions {
+    grid-column: 1 / -1;
+    grid-template-columns: 1fr !important;
+}
+
+.launcher-status-wrap {
+    grid-column: 1 / -1;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 8px;
+    align-items: stretch;
+}
+
+.launcher-status-terminal {
+    margin-top: 0;
+    border: 1px solid rgba(177, 133, 102, 0.35);
+    background: rgba(0, 0, 0, 0.34);
+    border-radius: 10px;
+    padding: 10px;
+    min-height: 90px;
+    max-height: 220px;
+    overflow: auto;
+    white-space: pre-wrap;
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    font-size: 12px;
+    line-height: 1.35;
+}
+
+.launcher-status-icon-side-btn {
+    width: 38px;
+    min-width: 38px;
+    height: 38px;
+    align-self: center;
+    margin-top: 0;
+    border-radius: 8px;
+    border: 1px solid rgba(177, 133, 102, 0.38);
+    background: rgba(28, 20, 20, 0.55);
+    color: #f2d9b5;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    transition: background 0.14s ease, border-color 0.14s ease, color 0.14s ease, transform 0.12s ease;
+}
+
+.launcher-status-icon-side-btn:hover {
+    background: rgba(74, 42, 36, 0.62);
+    border-color: rgba(245, 208, 111, 0.62);
+    color: #f5d06f;
+    transform: translateY(-1px);
+}
+
+.launcher-status-icon-side-btn i {
+    width: 17px;
+    height: 17px;
+}
+
+.launcher-advanced-toggle {
+    grid-column: 1 / -1;
+    border: 1px solid rgba(177, 133, 102, 0.38);
+    border-radius: 10px;
+    background: rgba(0, 0, 0, 0.22);
+    overflow: hidden;
+}
+
+.launcher-advanced-toggle summary {
+    list-style: none;
+    display: flex;
+    align-items: center;
+    justify-content: flex-start;
+    gap: 8px;
+    padding: 10px 12px;
+    color: #eadfcd;
+    font-weight: 700;
+    cursor: pointer;
+    user-select: none;
+    background: rgba(58, 36, 36, 0.22);
+}
+
+.launcher-advanced-toggle summary::-webkit-details-marker {
+    display: none;
+}
+
+.launcher-advanced-toggle summary::after {
+    content: "▾";
+    margin-left: auto;
+    font-size: 14px;
+    line-height: 1;
+    color: rgba(245, 208, 111, 0.95);
+    transition: transform 0.16s ease;
+}
+
+.launcher-advanced-toggle[open] summary {
+    border-bottom: 1px solid rgba(177, 133, 102, 0.28);
+    background: rgba(88, 46, 38, 0.28);
+}
+
+.launcher-advanced-toggle[open] summary::after {
+    transform: rotate(180deg);
+}
+
+.launcher-advanced-body {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    padding: 12px;
+}
+
+.launcher-advanced-memory {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 10px;
+}
+
 .launcher-play-panel[hidden] {
     display: none !important;
 }
@@ -327,13 +480,56 @@ body::-webkit-scrollbar-corner,
     gap: 10px;
 }
 
-#game-refresh-catalog-btn,
 #game-launch-btn,
 #game-stop-btn,
 #game-scan-java-btn {
     width: 100%;
     max-width: none;
     text-align: center;
+}
+
+#game-launch-btn {
+    min-height: 52px;
+    font-size: 15px;
+    font-weight: 800;
+    letter-spacing: 0.01em;
+    color: #fff7e8;
+    border-color: rgba(245, 208, 111, 0.82);
+    background: linear-gradient(180deg, rgba(196, 78, 56, 0.95), rgba(138, 49, 36, 0.95));
+    box-shadow: 0 10px 24px rgba(0, 0, 0, 0.35), 0 0 0 1px rgba(245, 208, 111, 0.24);
+    transition: transform 0.14s ease, box-shadow 0.16s ease, filter 0.16s ease;
+}
+
+#game-launch-btn:hover {
+    filter: brightness(1.08);
+    transform: translateY(-1px);
+    box-shadow: 0 14px 28px rgba(0, 0, 0, 0.4), 0 0 0 1px rgba(245, 208, 111, 0.32);
+}
+
+#game-launch-btn:active {
+    transform: translateY(1px);
+}
+
+#game-launch-btn i {
+    width: 17px !important;
+    height: 17px !important;
+}
+
+#game-stop-btn {
+    margin-top: 8px;
+    min-height: 42px;
+    font-size: 13px;
+    font-weight: 600;
+    color: rgba(236, 224, 208, 0.9);
+    border-color: rgba(177, 133, 102, 0.28);
+    background: rgba(38, 28, 28, 0.28);
+    opacity: 0.88;
+}
+
+#game-stop-btn:hover {
+    opacity: 1;
+    border-color: rgba(208, 153, 120, 0.42);
+    background: rgba(56, 36, 36, 0.34);
 }
 
 #launcher-play-view .launcher-btn,
@@ -477,17 +673,31 @@ body::-webkit-scrollbar-corner,
 .launcher-version-filters {
     display: grid;
     grid-template-columns: 1fr 1fr;
-    gap: 6px 10px;
+    gap: 8px;
     margin-top: 2px;
-    margin-bottom: 2px;
-    padding: 8px 10px;
-    border-radius: 8px;
-    border: 1px solid rgba(177, 133, 102, 0.25);
-    background: rgba(0, 0, 0, 0.22);
+    margin-bottom: 4px;
+    padding: 10px;
+    border-radius: 10px;
+    border: 1px solid rgba(177, 133, 102, 0.35);
+    background: linear-gradient(180deg, rgba(0, 0, 0, 0.3), rgba(0, 0, 0, 0.2));
 }
 
 .launcher-version-filters .launcher-check {
     margin: 0;
+    position: relative;
+    border: 1px solid rgba(177, 133, 102, 0.3);
+    background: rgba(35, 24, 24, 0.45);
+    border-radius: 999px;
+    padding: 7px 12px;
+    min-height: 36px;
+    box-sizing: border-box;
+    display: inline-flex;
+    align-items: center;
+    gap: 9px;
+    color: #eadfcd;
+    font-weight: 600;
+    transition: border-color 0.18s ease, background 0.18s ease, box-shadow 0.18s ease, transform 0.12s ease;
+    cursor: pointer;
 }
 
 .launcher-check {
@@ -500,6 +710,63 @@ body::-webkit-scrollbar-corner,
 
 .launcher-check input[type="checkbox"] {
     accent-color: #c74949;
+}
+
+.launcher-version-filters .launcher-check input[type="checkbox"] {
+    appearance: none;
+    -webkit-appearance: none;
+    width: 18px;
+    height: 18px;
+    border-radius: 6px;
+    border: 1px solid rgba(234, 205, 142, 0.6);
+    background: rgba(0, 0, 0, 0.45);
+    display: inline-grid;
+    place-items: center;
+    margin: 0;
+    flex-shrink: 0;
+    transition: border-color 0.18s ease, background 0.18s ease, box-shadow 0.18s ease;
+}
+
+.launcher-version-filters .launcher-check input[type="checkbox"]::after {
+    content: "";
+    width: 9px;
+    height: 9px;
+    border-radius: 3px;
+    background: transparent;
+    transform: scale(0.6);
+    opacity: 0;
+    transition: opacity 0.14s ease, transform 0.14s ease, background 0.14s ease;
+}
+
+.launcher-version-filters .launcher-check:has(input[type="checkbox"]:checked) {
+    border-color: rgba(245, 208, 111, 0.75);
+    background: linear-gradient(180deg, rgba(170, 76, 60, 0.38), rgba(116, 45, 35, 0.38));
+    box-shadow: 0 0 0 1px rgba(245, 208, 111, 0.18), inset 0 1px 0 rgba(255, 255, 255, 0.08);
+}
+
+.launcher-version-filters .launcher-check:has(input[type="checkbox"]:checked) input[type="checkbox"] {
+    border-color: rgba(245, 208, 111, 0.9);
+    background: rgba(245, 208, 111, 0.18);
+}
+
+.launcher-version-filters .launcher-check:has(input[type="checkbox"]:checked) input[type="checkbox"]::after {
+    background: #f5d06f;
+    opacity: 1;
+    transform: scale(1);
+}
+
+.launcher-version-filters .launcher-check:hover {
+    border-color: rgba(245, 208, 111, 0.6);
+    background: rgba(70, 38, 32, 0.55);
+}
+
+.launcher-version-filters .launcher-check:active {
+    transform: translateY(1px);
+}
+
+.launcher-version-filters .launcher-check input[type="checkbox"]:focus-visible {
+    outline: none;
+    box-shadow: 0 0 0 2px rgba(245, 208, 111, 0.32);
 }
 
 #info-content {
@@ -1295,6 +1562,26 @@ body::-webkit-scrollbar-corner,
 @media (max-width: 700px) {
     .launcher-shell {
         width: min(500px, 92vw);
+    }
+
+    .launcher-shell.java-expanded {
+        width: min(500px, 92vw);
+    }
+
+    .launcher-java-layout {
+        grid-template-columns: 1fr;
+    }
+
+    .launcher-java-tools {
+        grid-template-columns: 1fr !important;
+    }
+
+    .launcher-java-main-actions {
+        grid-template-columns: 1fr !important;
+    }
+
+    .launcher-advanced-memory {
+        grid-template-columns: 1fr;
     }
 
     .vitals-hud {

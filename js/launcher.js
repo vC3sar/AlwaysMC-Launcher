@@ -15,10 +15,15 @@ const gameDistributionSelect = document.getElementById("game-distribution");
 const gameVersionSelect = document.getElementById("game-version-select");
 const gameUsernameInput = document.getElementById("game-username");
 const gameJavaPathInput = document.getElementById("game-java-path");
-const gameRefreshCatalogBtn = document.getElementById("game-refresh-catalog-btn");
+const gameMinMemoryInput = document.getElementById("game-min-memory-mb");
+const gameMaxMemoryInput = document.getElementById("game-max-memory-mb");
+const gameExtraJvmArgsInput = document.getElementById("game-extra-jvm-args");
+const gameExtraGameArgsInput = document.getElementById("game-extra-game-args");
+const gameAdvancedSection = document.getElementById("game-advanced-section");
 const gameLaunchBtn = document.getElementById("game-launch-btn");
 const gameStopBtn = document.getElementById("game-stop-btn");
 const gameScanJavaBtn = document.getElementById("game-scan-java-btn");
+const gameShowDiagnosticsBtn = document.getElementById("game-show-diagnostics-btn");
 const gameInstallStatus = document.getElementById("game-install-status");
 const playTabBotBtn = document.getElementById("play-tab-bot");
 const playTabJavaBtn = document.getElementById("play-tab-java");
@@ -46,6 +51,7 @@ let gameCatalog = { vanilla: [], forge: [], fabric: [] };
 let activeInstallId = "";
 let installPollTimer = null;
 let activePlayTab = "bot";
+let javaSectionCatalogLoaded = false;
 const versionTypeFilters = {
   release: true,
   snapshot: false,
@@ -53,6 +59,7 @@ const versionTypeFilters = {
   old_alpha: false,
 };
 const MENU_AUDIO_MUTED_STORAGE_KEY = "launcher.menuAudioMuted";
+const GAME_LAST_SELECTIONS_STORAGE_KEY = "launcher.gameLastSelections.v1";
 const MAIN_MENU_BUTTON_IDS = ["menu-play-btn", "menu-config-btn", "menu-info-btn", "menu-fullscreen-btn", "menu-exit-btn"];
 
 const BG_1080_SRC = "mp4/menu-main.mp4";
@@ -172,10 +179,88 @@ function getEntryVersionId(entry) {
   return String(entry.id || "");
 }
 
+function loadLaunchOptionsFromConfig(cfg) {
+  const downloads = cfg?.launcher?.downloads && typeof cfg.launcher.downloads === "object" ? cfg.launcher.downloads : {};
+  if (gameJavaPathInput) gameJavaPathInput.value = String(downloads.javaPath || "").trim();
+  if (gameMinMemoryInput) gameMinMemoryInput.value = String(downloads.minMemoryMb ?? 1024);
+  if (gameMaxMemoryInput) gameMaxMemoryInput.value = String(downloads.maxMemoryMb ?? 2048);
+  if (gameExtraJvmArgsInput) gameExtraJvmArgsInput.value = String(downloads.extraJvmArgs || "");
+  if (gameExtraGameArgsInput) gameExtraGameArgsInput.value = String(downloads.extraGameArgs || "");
+}
+
+function buildLaunchOptionsFromInputs() {
+  return {
+    javaPath: String(gameJavaPathInput?.value || "").trim(),
+    minMemoryMb: Number.parseInt(String(gameMinMemoryInput?.value || "1024"), 10) || 1024,
+    maxMemoryMb: Number.parseInt(String(gameMaxMemoryInput?.value || "2048"), 10) || 2048,
+    extraJvmArgs: String(gameExtraJvmArgsInput?.value || "").trim(),
+    extraGameArgs: String(gameExtraGameArgsInput?.value || "").trim(),
+  };
+}
+
+async function persistLaunchOptionsToConfig() {
+  if (!launcherAPI || typeof launcherAPI.getConfig !== "function" || typeof launcherAPI.saveConfig !== "function") return;
+  const cfg = await launcherAPI.getConfig();
+  const next = cfg && typeof cfg === "object" ? cfg : {};
+  if (!next.launcher || typeof next.launcher !== "object") next.launcher = {};
+  if (!next.launcher.downloads || typeof next.launcher.downloads !== "object") next.launcher.downloads = {};
+  const launchOptions = buildLaunchOptionsFromInputs();
+  next.launcher.downloads.javaPath = launchOptions.javaPath;
+  next.launcher.downloads.minMemoryMb = Math.max(512, launchOptions.minMemoryMb);
+  next.launcher.downloads.maxMemoryMb = Math.max(next.launcher.downloads.minMemoryMb, launchOptions.maxMemoryMb);
+  next.launcher.downloads.extraJvmArgs = launchOptions.extraJvmArgs;
+  next.launcher.downloads.extraGameArgs = launchOptions.extraGameArgs;
+  await launcherAPI.saveConfig(next);
+}
+
+function loadLastGameSelections() {
+  try {
+    const raw = window.localStorage.getItem(GAME_LAST_SELECTIONS_STORAGE_KEY);
+    if (!raw) return {};
+    const parsed = JSON.parse(raw);
+    return parsed && typeof parsed === "object" ? parsed : {};
+  } catch {
+    return {};
+  }
+}
+
+function saveLastGameSelections(nextSelections) {
+  try {
+    const safe = nextSelections && typeof nextSelections === "object" ? nextSelections : {};
+    window.localStorage.setItem(GAME_LAST_SELECTIONS_STORAGE_KEY, JSON.stringify(safe));
+  } catch {
+    // Ignorar errores de almacenamiento.
+  }
+}
+
+function getCurrentVersionSelectionPayload() {
+  const selected = gameVersionSelect?.selectedOptions?.[0];
+  if (!selected) return null;
+  return {
+    distribution: String(gameDistributionSelect?.value || "vanilla"),
+    versionId: String(selected.value || ""),
+    source: String(selected.dataset.source || gameDistributionSelect?.value || "vanilla"),
+    loaderVersion: String(selected.dataset.loaderVersion || ""),
+    type: String(selected.dataset.type || ""),
+    label: String(selected.textContent || "").trim(),
+    updatedAt: Date.now(),
+  };
+}
+
+function persistCurrentVersionSelection() {
+  const payload = getCurrentVersionSelectionPayload();
+  if (!payload || !payload.versionId) return;
+  const all = loadLastGameSelections();
+  all[payload.distribution] = payload;
+  saveLastGameSelections(all);
+}
+
 function refreshVersionSelect() {
   if (!gameVersionSelect) return;
   const entries = applyVersionFilters(getDistributionEntries(), String(gameDistributionSelect?.value || "vanilla"), versionTypeFilters);
   const current = gameVersionSelect.value;
+  const currentDistribution = String(gameDistributionSelect?.value || "vanilla");
+  const remembered = loadLastGameSelections()?.[currentDistribution] || null;
   gameVersionSelect.innerHTML = "";
   entries.forEach((entry) => {
     const option = document.createElement("option");
@@ -190,7 +275,11 @@ function refreshVersionSelect() {
     gameVersionSelect.appendChild(option);
   });
   if (current) gameVersionSelect.value = current;
+  if ((!gameVersionSelect.value || gameVersionSelect.selectedIndex < 0) && remembered?.versionId) {
+    gameVersionSelect.value = String(remembered.versionId);
+  }
   if (!gameVersionSelect.value && gameVersionSelect.options.length > 0) gameVersionSelect.selectedIndex = 0;
+  if (gameVersionSelect.value) persistCurrentVersionSelection();
   if (gameVersionSelect.options.length === 0) {
     setGameStatus("Sin resultados para los filtros seleccionados.", true);
   }
@@ -219,9 +308,40 @@ function updateFilterVisibilityByDistribution() {
   }
 }
 
+async function launchSelectedGameFromUI() {
+  if (!launcherAPI) return;
+  const selected = gameVersionSelect?.selectedOptions?.[0];
+  if (!selected) return setGameStatus("Selecciona una versión para lanzar.", true);
+  const authMode = String(gameAuthModeSelect?.value || "offline");
+  const source = selected.dataset.source || "vanilla";
+  const versionId = selected.value;
+  const loaderVersion = selected.dataset.loaderVersion || "";
+  const launchOptions = buildLaunchOptionsFromInputs();
+  const javaPath = launchOptions.javaPath;
+  persistCurrentVersionSelection();
+  await persistLaunchOptionsToConfig();
+  if (javaPath) await launcherAPI.setJavaPath(javaPath);
+  const result = await ensureInstalledThenLaunch({
+    source,
+    versionId,
+    loaderVersion,
+    authMode,
+    username: String(gameUsernameInput?.value || "JugadorOffline").trim() || "JugadorOffline",
+    javaPath: launchOptions.javaPath,
+    minMemoryMb: launchOptions.minMemoryMb,
+    maxMemoryMb: Math.max(launchOptions.minMemoryMb, launchOptions.maxMemoryMb),
+    extraJvmArgs: launchOptions.extraJvmArgs,
+    extraGameArgs: launchOptions.extraGameArgs,
+  });
+  if (!result.ok) return setGameStatus(result.error || "No se pudo lanzar.", true);
+  setGameStatus(`Juego iniciado (PID ${result.pid || "?"})`);
+}
+
 function switchPlayTab(tab) {
   const normalized = tab === "java" ? "java" : "bot";
   activePlayTab = normalized;
+  const launcherShell = document.querySelector(".launcher-shell");
+  if (launcherShell) launcherShell.classList.toggle("java-expanded", normalized === "java");
   if (playTabBotBtn) {
     const active = normalized === "bot";
     playTabBotBtn.classList.toggle("active", active);
@@ -234,6 +354,12 @@ function switchPlayTab(tab) {
   }
   if (playTabBotPanel) playTabBotPanel.hidden = normalized !== "bot";
   if (playTabJavaPanel) playTabJavaPanel.hidden = normalized !== "java";
+}
+
+async function ensureJavaCatalogLoadedOnce() {
+  if (javaSectionCatalogLoaded) return;
+  await loadGameCatalog(true);
+  javaSectionCatalogLoaded = true;
 }
 
 async function waitInstallCompletion(installId) {
@@ -254,7 +380,7 @@ async function waitInstallCompletion(installId) {
   }
 }
 
-async function ensureInstalledThenLaunch({ source, versionId, loaderVersion, authMode, username, javaPath }) {
+async function ensureInstalledThenLaunch({ source, versionId, loaderVersion, authMode, username, javaPath, minMemoryMb, maxMemoryMb, extraJvmArgs, extraGameArgs }) {
   if (!launcherAPI) return { ok: false, error: "API no disponible." };
   if (source === "forge") return { ok: false, error: "Forge automático aún no está soportado en esta build." };
 
@@ -274,9 +400,75 @@ async function ensureInstalledThenLaunch({ source, versionId, loaderVersion, aut
 
   const launchVersionId = source === "fabric" && check?.profileId ? check.profileId : versionId;
   setGameStatus(`Lanzando ${launchVersionId}...`);
-  const launchRes = await launcherAPI.launchGame({ versionId: launchVersionId, authMode, username, javaPath });
+  const launchRes = await launcherAPI.launchGame({
+    versionId: launchVersionId,
+    authMode,
+    username,
+    javaPath,
+    minMemoryMb,
+    maxMemoryMb,
+    extraJvmArgs,
+    extraGameArgs,
+  });
   if (!launchRes?.ok) return { ok: false, error: launchRes?.error || "No se pudo lanzar el juego." };
-  return { ok: true, pid: launchRes.pid };
+  const runtimeCheck = await waitForRuntimeStable(8000, 4500);
+  if (!runtimeCheck.ok) return runtimeCheck;
+  return { ok: true, pid: runtimeCheck.pid || launchRes.pid };
+}
+
+function formatRuntimeDiagnostics(st) {
+  const lines = [];
+  lines.push("Diagnóstico runtime:");
+  lines.push(`- running: ${Boolean(st?.running)}`);
+  lines.push(`- pid: ${st?.pid ?? "n/a"}`);
+  lines.push(`- java seleccionado: ${st?.javaPathSelected || "n/a"}`);
+  lines.push(`- java probados: ${Array.isArray(st?.javaPathTried) ? st.javaPathTried.join(" | ") || "n/a" : "n/a"}`);
+  lines.push(`- lastExitCode: ${st?.lastExitCode ?? "n/a"}`);
+  lines.push(`- lastLifecycleEvent: ${st?.lastLifecycleEvent || "n/a"}`);
+  lines.push(`- lineCount: ${Number(st?.lineCount || 0)}`);
+  if (Number(st?.silenceMs || 0) > 0) lines.push(`- silenceMs: ${st.silenceMs} (threshold ${st?.stallThresholdMs || "n/a"})`);
+  if (st?.lastError) lines.push(`- lastError: ${st.lastError}`);
+  if (st?.lastErrorLines) {
+    lines.push("- últimas líneas:");
+    lines.push(st.lastErrorLines);
+  }
+  return lines.join("\n");
+}
+
+async function waitForRuntimeStable(timeoutMs = 8000, healthWindowMs = 4500) {
+  if (!launcherAPI || typeof launcherAPI.getGameRuntimeStatus !== "function") return { ok: true };
+  const start = Date.now();
+  let firstRunning = null;
+  while (Date.now() - start <= timeoutMs) {
+    const st = await launcherAPI.getGameRuntimeStatus();
+    if (!st?.ok) return { ok: false, error: st?.error || "No se pudo validar estado del juego." };
+    if (st.running) {
+      if (!firstRunning) firstRunning = Date.now();
+      const healthElapsed = Date.now() - firstRunning;
+      if (st.stalled && healthElapsed >= 1500) {
+        return { ok: false, error: `Proceso Java activo pero sin progreso.\n${formatRuntimeDiagnostics(st)}` };
+      }
+      if (healthElapsed >= healthWindowMs) {
+        return { ok: true, pid: st.pid };
+      }
+    }
+    if (st.lastExitCode !== null || st.lastError) {
+      const details = [st.lastError || `Proceso cerrado con código ${st.lastExitCode}.`, st.lastErrorLines || ""].filter(Boolean).join("\n");
+      return { ok: false, error: details || "El juego cerró antes de iniciar." };
+    }
+    // eslint-disable-next-line no-await-in-loop
+    await new Promise((resolve) => setTimeout(resolve, 500));
+  }
+  return { ok: false, error: "Timeout esperando que el juego quede en ejecución." };
+}
+
+async function showRuntimeDiagnostics() {
+  if (!launcherAPI || typeof launcherAPI.getGameRuntimeStatus !== "function") return;
+  const st = await launcherAPI.getGameRuntimeStatus();
+  if (!st?.ok) return setGameStatus(st?.error || "No se pudo obtener diagnóstico runtime.", true);
+  const text = formatRuntimeDiagnostics(st);
+  const isWarn = Boolean(st?.stalled || st?.lastError || st?.lastExitCode !== null);
+  setGameStatus(text, isWarn);
 }
 
 async function loadGameCatalog(forceRefresh = false) {
@@ -593,12 +785,11 @@ function initLauncherMenu() {
         document.getElementById("new-version").value = last.version || "";
       }
       const cfg = await launcherAPI.getConfig();
-      const javaPath = String(cfg?.launcher?.downloads?.javaPath || "").trim();
-      if (gameJavaPathInput) gameJavaPathInput.value = javaPath;
+      loadLaunchOptionsFromConfig(cfg);
       if (!gameUsernameInput.value) gameUsernameInput.value = String(last?.username || "JugadorOffline");
       syncVersionTypeFiltersUI();
-      await loadGameCatalog(false);
       updateFilterVisibilityByDistribution();
+      if (activePlayTab === "java") await ensureJavaCatalogLoadedOnce();
     }
   });
 
@@ -612,29 +803,8 @@ function initLauncherMenu() {
   bindClick("continue-last-btn", bootContinue);
   bindClick("create-new-btn", () => document.getElementById("new-profile-form").classList.remove("hidden"));
   bindClick("start-new-profile-btn", bootNewProfile);
-  bindClick("game-refresh-catalog-btn", async () => {
-    await loadGameCatalog(true);
-  });
   bindClick("game-launch-btn", async () => {
-    if (!launcherAPI) return;
-    const selected = gameVersionSelect?.selectedOptions?.[0];
-    if (!selected) return setGameStatus("Selecciona una versión para lanzar.", true);
-    const authMode = String(gameAuthModeSelect?.value || "offline");
-    const source = selected.dataset.source || "vanilla";
-    const versionId = selected.value;
-    const loaderVersion = selected.dataset.loaderVersion || "";
-    const javaPath = String(gameJavaPathInput?.value || "").trim();
-    if (javaPath) await launcherAPI.setJavaPath(javaPath);
-    const result = await ensureInstalledThenLaunch({
-      source,
-      versionId,
-      loaderVersion,
-      authMode,
-      username: String(gameUsernameInput?.value || "JugadorOffline").trim() || "JugadorOffline",
-      javaPath,
-    });
-    if (!result.ok) return setGameStatus(result.error || "No se pudo lanzar.", true);
-    setGameStatus(`Juego iniciado (PID ${result.pid || "?"})`);
+    await launchSelectedGameFromUI();
   });
   bindClick("game-stop-btn", async () => {
     if (!launcherAPI) return;
@@ -650,8 +820,12 @@ function initLauncherMenu() {
     const runtime = Array.isArray(res.runtimes) && res.runtimes.length ? res.runtimes[0] : null;
     if (!runtime) return setGameStatus("No se encontró Java automáticamente. Define la ruta manualmente.", true);
     if (gameJavaPathInput) gameJavaPathInput.value = runtime.path;
+    await persistLaunchOptionsToConfig();
     await launcherAPI.setJavaPath(runtime.path);
     setGameStatus(`Java detectado: ${runtime.path}`);
+  });
+  bindClick("game-show-diagnostics-btn", async () => {
+    await showRuntimeDiagnostics();
   });
   bindClick("save-config-btn", async () => {
     if (!launcherAPI) return;
@@ -670,19 +844,35 @@ function initLauncherMenu() {
 
   if (bgVideoModeSelect) bgVideoModeSelect.addEventListener("change", () => applyLauncherBackgroundVideo(bgVideoModeSelect.value));
   if (playTabBotBtn) playTabBotBtn.addEventListener("click", () => switchPlayTab("bot"));
-  if (playTabJavaBtn) playTabJavaBtn.addEventListener("click", () => switchPlayTab("java"));
-  if (gameDistributionSelect) gameDistributionSelect.addEventListener("change", () => {
+  if (playTabJavaBtn) playTabJavaBtn.addEventListener("click", async () => {
+    switchPlayTab("java");
+    await ensureJavaCatalogLoadedOnce();
+  });
+  if (gameDistributionSelect) gameDistributionSelect.addEventListener("change", async () => {
     updateFilterVisibilityByDistribution();
     refreshVersionSelect();
+    persistCurrentVersionSelection();
+    await loadGameCatalog(true);
   });
-  if (filterRelease) filterRelease.addEventListener("change", () => { versionTypeFilters.release = Boolean(filterRelease.checked); refreshVersionSelect(); });
-  if (filterSnapshot) filterSnapshot.addEventListener("change", () => { versionTypeFilters.snapshot = Boolean(filterSnapshot.checked); refreshVersionSelect(); });
-  if (filterOldBeta) filterOldBeta.addEventListener("change", () => { versionTypeFilters.old_beta = Boolean(filterOldBeta.checked); refreshVersionSelect(); });
-  if (filterOldAlpha) filterOldAlpha.addEventListener("change", () => { versionTypeFilters.old_alpha = Boolean(filterOldAlpha.checked); refreshVersionSelect(); });
+  if (gameVersionSelect) gameVersionSelect.addEventListener("change", () => {
+    persistCurrentVersionSelection();
+  });
+  if (gameVersionSelect) gameVersionSelect.addEventListener("dblclick", async () => {
+    await launchSelectedGameFromUI();
+  });
+  if (filterRelease) filterRelease.addEventListener("change", async () => { versionTypeFilters.release = Boolean(filterRelease.checked); refreshVersionSelect(); await loadGameCatalog(true); });
+  if (filterSnapshot) filterSnapshot.addEventListener("change", async () => { versionTypeFilters.snapshot = Boolean(filterSnapshot.checked); refreshVersionSelect(); await loadGameCatalog(true); });
+  if (filterOldBeta) filterOldBeta.addEventListener("change", async () => { versionTypeFilters.old_beta = Boolean(filterOldBeta.checked); refreshVersionSelect(); await loadGameCatalog(true); });
+  if (filterOldAlpha) filterOldAlpha.addEventListener("change", async () => { versionTypeFilters.old_alpha = Boolean(filterOldAlpha.checked); refreshVersionSelect(); await loadGameCatalog(true); });
   if (gameAuthModeSelect) gameAuthModeSelect.addEventListener("change", () => {
     const authMode = String(gameAuthModeSelect.value || "offline");
     if (gameUsernameInput) gameUsernameInput.disabled = authMode !== "offline";
   });
+  if (gameJavaPathInput) gameJavaPathInput.addEventListener("change", async () => { await persistLaunchOptionsToConfig(); });
+  if (gameMinMemoryInput) gameMinMemoryInput.addEventListener("change", async () => { await persistLaunchOptionsToConfig(); });
+  if (gameMaxMemoryInput) gameMaxMemoryInput.addEventListener("change", async () => { await persistLaunchOptionsToConfig(); });
+  if (gameExtraJvmArgsInput) gameExtraJvmArgsInput.addEventListener("change", async () => { await persistLaunchOptionsToConfig(); });
+  if (gameExtraGameArgsInput) gameExtraGameArgsInput.addEventListener("change", async () => { await persistLaunchOptionsToConfig(); });
   switchPlayTab("bot");
   showLauncherView("main");
 }

@@ -138,7 +138,7 @@ async function downloadFileWithVerify(url, destPath, { sha1 = "", size = -1, ret
   throw lastError || new Error(`No se pudo descargar ${url}`);
 }
 
-function applyRuleSet(rules, osName = "windows") {
+function applyRuleSet(rules, osName = "windows", featureFlags = null) {
   if (!Array.isArray(rules) || rules.length === 0) return true;
   let allowed = false;
   for (const rule of rules) {
@@ -146,6 +146,21 @@ function applyRuleSet(rules, osName = "windows") {
     const osRule = rule && rule.os ? String(rule.os.name || "").toLowerCase() : "";
     const matchesOs = !osRule || osRule === osName;
     if (!matchesOs) continue;
+
+    const featuresRule = rule && rule.features && typeof rule.features === "object" ? rule.features : null;
+    let matchesFeatures = true;
+    if (featuresRule) {
+      const flags = featureFlags && typeof featureFlags === "object" ? featureFlags : {};
+      for (const [key, expected] of Object.entries(featuresRule)) {
+        const actual = Boolean(flags[key]);
+        if (actual !== Boolean(expected)) {
+          matchesFeatures = false;
+          break;
+        }
+      }
+    }
+    if (!matchesFeatures) continue;
+
     allowed = action === "allow";
     if (action === "disallow") allowed = false;
   }
@@ -168,6 +183,107 @@ function formatJvmRuleArg(arg, replacements) {
     output = output.replaceAll(`\${${key}}`, String(value));
   }
   return output;
+}
+
+function parseLaunchArgsString(raw) {
+  const input = String(raw || "").trim();
+  if (!input) return [];
+  const out = [];
+  let token = "";
+  let quote = "";
+  let escaped = false;
+  for (let i = 0; i < input.length; i += 1) {
+    const ch = input[i];
+    if (escaped) {
+      token += ch;
+      escaped = false;
+      continue;
+    }
+    if (ch === "\\") {
+      escaped = true;
+      continue;
+    }
+    if ((ch === "\"" || ch === "'")) {
+      if (!quote) {
+        quote = ch;
+        continue;
+      }
+      if (quote === ch) {
+        quote = "";
+        continue;
+      }
+    }
+    if (!quote && /\s/.test(ch)) {
+      if (token) {
+        out.push(token);
+        token = "";
+      }
+      continue;
+    }
+    token += ch;
+  }
+  if (token) out.push(token);
+  return out;
+}
+
+function parseLibraryNameParts(name) {
+  const parts = String(name || "").split(":");
+  return {
+    group: parts[0] || "",
+    artifact: parts[1] || "",
+    version: parts[2] || "",
+    classifier: parts[3] || "",
+  };
+}
+
+function resolveWindowsNativeDownload(lib) {
+  if (!applyRuleSet(lib?.rules, "windows")) {
+    return { download: null, reason: "rules_disallow_windows" };
+  }
+
+  const archKey = process.arch === "arm64" ? "arm64" : process.arch === "ia32" ? "x86" : "x64";
+  const classifiers = lib?.downloads?.classifiers;
+  const nativePattern = String(lib?.natives?.windows || "").trim();
+
+  if (classifiers && typeof classifiers === "object") {
+    const candidates = [];
+    if (nativePattern) {
+      candidates.push(nativePattern);
+      candidates.push(nativePattern.replace("${arch}", archKey === "x64" ? "64" : archKey === "x86" ? "32" : "arm64"));
+      candidates.push(nativePattern.replace("${arch}", "64"));
+      candidates.push(nativePattern.replace("${arch}", "32"));
+      candidates.push(nativePattern.replace("${arch}", "arm64"));
+    }
+    candidates.push("natives-windows");
+    candidates.push("natives-windows-arm64");
+    candidates.push("natives-windows-x86");
+    candidates.push("natives-windows-64");
+    candidates.push("natives-windows-32");
+
+    for (const key of candidates) {
+      const found = classifiers[key];
+      if (found && found.path) return { download: found, classifier: key, source: "classifiers" };
+    }
+
+    const fallbackKey = Object.keys(classifiers).find((k) => k.startsWith("natives-windows"));
+    if (fallbackKey && classifiers[fallbackKey]?.path) {
+      return { download: classifiers[fallbackKey], classifier: fallbackKey, source: "classifiers_fallback" };
+    }
+  }
+
+  const artifact = lib?.downloads?.artifact;
+  if (artifact?.path && lib?.name) {
+    const parsed = parseLibraryNameParts(lib.name);
+    const c = String(parsed.classifier || "").toLowerCase();
+    if (c.startsWith("natives-windows")) {
+      if (c.includes("arm64") && archKey !== "arm64") return { download: null, reason: "arch_mismatch_arm64" };
+      if ((c.includes("x86") || c.endsWith("-32")) && archKey === "x64") return { download: null, reason: "arch_mismatch_x86" };
+      return { download: artifact, classifier: parsed.classifier || "natives-windows", source: "artifact_name" };
+    }
+    return { download: null, reason: "artifact_not_windows_native" };
+  }
+
+  return { download: null, reason: "no_native_descriptor" };
 }
 
 function parseMinecraftVersionInfo(versionId) {
@@ -218,8 +334,20 @@ class GameLauncherService {
       lastExitCode: null,
       lastError: "",
       lastLines: [],
+      startedAt: 0,
+      lastStdoutAt: 0,
+      lastStderrAt: 0,
+      lastOutputAt: 0,
+      lineCount: 0,
+      lastLifecycleEvent: "idle",
       updatedAt: Date.now(),
     };
+  }
+
+  getRuntimeStallThresholdMs() {
+    const cfg = this.loadConfig() || {};
+    const raw = Number.parseInt(String(cfg?.launcher?.downloads?.runtimeStallThresholdMs || "15000"), 10);
+    return Number.isFinite(raw) && raw >= 5000 ? raw : 15000;
   }
 
   getMinecraftDir() {
@@ -654,10 +782,9 @@ class GameLauncherService {
         }
       }
 
-      const classifiers = lib.downloads?.classifiers;
-      const natives = lib.natives?.windows;
-      if (classifiers && natives && classifiers[natives]) {
-        const n = classifiers[natives];
+      const nativeInfo = resolveWindowsNativeDownload(lib);
+      const n = nativeInfo?.download;
+      if (n) {
         const dest = path.join(librariesDir, n.path);
         byteCounter.total += Number(n.size || 0);
         tasks.push({
@@ -721,7 +848,7 @@ class GameLauncherService {
     this.emitInstallUpdate(installId, { phase: "finalizing", progress: maxProgress, message: `Instalación ${versionId} completada.` });
   }
 
-  async launchGame({ versionId = "", username = "Player", authMode = "offline", javaPath = "", minMemoryMb = 1024, maxMemoryMb = 2048 } = {}) {
+  async launchGame({ versionId = "", username = "Player", authMode = "offline", javaPath = "", minMemoryMb = 0, maxMemoryMb = 0, extraJvmArgs = "", extraGameArgs = "" } = {}) {
     const cleanVersion = String(versionId || "").trim();
     if (!cleanVersion) return { ok: false, error: "Versión requerida para lanzar." };
     if (authMode === "microsoft") {
@@ -745,6 +872,7 @@ class GameLauncherService {
 
     const classpathEntries = [];
     const nativeJarPaths = [];
+    const nativeSkipped = [];
     for (const lib of libraries) {
       if (!applyRuleSet(lib.rules, "windows")) continue;
       if (lib.downloads?.artifact?.path) {
@@ -753,11 +881,13 @@ class GameLauncherService {
         const rel = toArtifactPath(lib.name);
         if (rel) classpathEntries.push(path.join(librariesDir, rel));
       }
-      const classifiers = lib.downloads?.classifiers;
-      const natives = lib.natives?.windows;
-      if (classifiers && natives && classifiers[natives]?.path) {
-        nativeJarPaths.push(path.join(librariesDir, classifiers[natives].path));
-      }
+      const nativeInfo = resolveWindowsNativeDownload(lib);
+      const nativeDownload = nativeInfo?.download;
+      if (nativeDownload?.path) nativeJarPaths.push(path.join(librariesDir, nativeDownload.path));
+      else if (nativeInfo?.reason) nativeSkipped.push({
+        name: String(lib?.name || "unknown"),
+        reason: nativeInfo.reason,
+      });
     }
     if (!(await fileExists(resolved.clientJarPath))) {
       return { ok: false, error: `No se encontró client.jar para ${cleanVersion} ni su cadena inheritsFrom.` };
@@ -768,7 +898,7 @@ class GameLauncherService {
     const versionFolder = resolved.chain[0].folder;
     const nativesDir = path.join(versionFolder, `natives-${Date.now()}`);
     await ensureDir(nativesDir);
-    const nativeExtraction = await this.extractNativeJars(nativeJarPaths, nativesDir);
+    const nativeExtraction = await this.extractNativeJars(nativeJarPaths, nativesDir, nativeSkipped);
     if (!nativeExtraction.ok) return nativeExtraction;
 
     const replacements = {
@@ -791,13 +921,28 @@ class GameLauncherService {
       resolution_width: "1280",
       resolution_height: "720",
     };
+    const launchFeatures = {
+      has_custom_resolution: true,
+      is_demo_user: false,
+      has_quick_plays_support: false,
+      is_quick_play_singleplayer: false,
+      is_quick_play_multiplayer: false,
+      is_quick_play_realms: false,
+    };
 
-    const jvmArgs = [`-Xms${Math.max(512, Number(minMemoryMb) || 1024)}M`, `-Xmx${Math.max(1024, Number(maxMemoryMb) || 2048)}M`];
+    const cfg = this.loadConfig() || {};
+    const cfgDownloads = cfg?.launcher?.downloads && typeof cfg.launcher.downloads === "object" ? cfg.launcher.downloads : {};
+    const effectiveMinMemory = Math.max(512, Number(minMemoryMb) || Number(cfgDownloads.minMemoryMb) || 1024);
+    const effectiveMaxMemory = Math.max(effectiveMinMemory, Number(maxMemoryMb) || Number(cfgDownloads.maxMemoryMb) || 2048);
+    const effectiveExtraJvmArgs = String(extraJvmArgs || cfgDownloads.extraJvmArgs || "").trim();
+    const effectiveExtraGameArgs = String(extraGameArgs || cfgDownloads.extraGameArgs || "").trim();
+
+    const jvmArgs = [`-Xms${effectiveMinMemory}M`, `-Xmx${effectiveMaxMemory}M`];
     if (Array.isArray(versionMeta.arguments?.jvm)) {
       for (const entry of versionMeta.arguments.jvm) {
         if (typeof entry === "string") {
           jvmArgs.push(formatJvmRuleArg(entry, replacements));
-        } else if (entry && applyRuleSet(entry.rules, "windows")) {
+        } else if (entry && applyRuleSet(entry.rules, "windows", launchFeatures)) {
           const val = entry.value;
           if (Array.isArray(val)) {
             for (const v of val) jvmArgs.push(formatJvmRuleArg(v, replacements));
@@ -819,7 +964,7 @@ class GameLauncherService {
       for (const entry of versionMeta.arguments.game) {
         if (typeof entry === "string") {
           gameArgs.push(formatJvmRuleArg(entry, replacements));
-        } else if (entry && applyRuleSet(entry.rules, "windows")) {
+        } else if (entry && applyRuleSet(entry.rules, "windows", launchFeatures)) {
           const val = entry.value;
           if (Array.isArray(val)) {
             for (const v of val) gameArgs.push(formatJvmRuleArg(v, replacements));
@@ -830,6 +975,13 @@ class GameLauncherService {
       }
     } else if (typeof versionMeta.minecraftArguments === "string") {
       gameArgs.push(...versionMeta.minecraftArguments.split(" ").map((x) => formatJvmRuleArg(x, replacements)));
+    }
+
+    if (effectiveExtraJvmArgs) {
+      jvmArgs.push(...parseLaunchArgsString(effectiveExtraJvmArgs));
+    }
+    if (effectiveExtraGameArgs) {
+      gameArgs.push(...parseLaunchArgsString(effectiveExtraGameArgs));
     }
 
     const finalJvmArgs = jvmArgs.map((x) => formatJvmRuleArg(x, replacements));
@@ -871,10 +1023,12 @@ class GameLauncherService {
     return { ok: true };
   }
 
-  async extractNativeJars(nativeJarPaths, nativesDir) {
+  async extractNativeJars(nativeJarPaths, nativesDir, nativeSkipped = []) {
     const jars = Array.isArray(nativeJarPaths) ? nativeJarPaths : [];
+    const attempted = [];
     for (const jarPath of jars) {
       if (!(await fileExists(jarPath))) continue;
+      attempted.push(jarPath);
       const tmpZipPath = `${jarPath}.tmp-native.zip`;
       try {
         await fsp.copyFile(jarPath, tmpZipPath);
@@ -885,7 +1039,11 @@ class GameLauncherService {
           "foreach($entry in $zip.Entries){",
           "  if ($entry.FullName -like 'META-INF/*' -or $entry.FullName -like 'META-INF\\\\*'){ continue }",
           "  if ([string]::IsNullOrWhiteSpace($entry.Name)){ continue }",
-          `  $target = Join-Path '${nativesDir.replace(/'/g, "''")}' $entry.Name`,
+          "  $safePath = ($entry.FullName -replace '/', '\\\\')",
+          "  $safePath = $safePath.TrimStart('\\\\')",
+          `  $target = Join-Path '${nativesDir.replace(/'/g, "''")}' $safePath`,
+          "  $targetDir = Split-Path -Parent $target",
+          "  if (-not [string]::IsNullOrWhiteSpace($targetDir)) { New-Item -ItemType Directory -Force -Path $targetDir | Out-Null }",
           "  [System.IO.Compression.ZipFileExtensions]::ExtractToFile($entry, $target, $true)",
           "}",
           "$zip.Dispose()",
@@ -899,10 +1057,56 @@ class GameLauncherService {
         await fsp.rm(tmpZipPath, { force: true }).catch(() => {});
       }
     }
-    const files = await fsp.readdir(nativesDir).catch(() => []);
-    const hasDll = files.some((f) => String(f).toLowerCase().endsWith(".dll"));
-    if (!hasDll) return { ok: false, error: "Nativos no extraídos: no se encontraron DLLs en runtime nativo." };
-    return { ok: true };
+    const dllCount = await this.countDllsInDirectory(nativesDir);
+    if (dllCount <= 0) {
+      const detail = attempted.length
+        ? ` JARs nativos detectados=${attempted.length}; intentados: ${attempted.slice(-6).join(" | ")}`
+        : " No se detectaron JARs nativos para extraer.";
+      const skippedTop = Array.isArray(nativeSkipped) && nativeSkipped.length > 0
+        ? ` Descartados (top 3): ${nativeSkipped.slice(0, 3).map((x) => `${x.name}=>${x.reason}`).join(" | ")}`
+        : "";
+      return { ok: false, error: `Nativos no extraídos: no se encontraron DLLs en runtime nativo.${detail}${skippedTop}` };
+    }
+    return { ok: true, dllCount, detectedNativeJars: attempted.length };
+  }
+
+  async directoryHasDll(rootDir) {
+    const stack = [rootDir];
+    while (stack.length > 0) {
+      const dir = stack.pop();
+      let entries = [];
+      try {
+        entries = await fsp.readdir(dir, { withFileTypes: true });
+      } catch {
+        continue;
+      }
+      for (const entry of entries) {
+        const full = path.join(dir, entry.name);
+        if (entry.isDirectory()) stack.push(full);
+        else if (entry.isFile() && String(entry.name).toLowerCase().endsWith(".dll")) return true;
+      }
+    }
+    return false;
+  }
+
+  async countDllsInDirectory(rootDir) {
+    let count = 0;
+    const stack = [rootDir];
+    while (stack.length > 0) {
+      const dir = stack.pop();
+      let entries = [];
+      try {
+        entries = await fsp.readdir(dir, { withFileTypes: true });
+      } catch {
+        continue;
+      }
+      for (const entry of entries) {
+        const full = path.join(dir, entry.name);
+        if (entry.isDirectory()) stack.push(full);
+        else if (entry.isFile() && String(entry.name).toLowerCase().endsWith(".dll")) count += 1;
+      }
+    }
+    return count;
   }
 
   async tryLaunchProcess({ javaExec, args, minecraftDir }) {
@@ -919,20 +1123,38 @@ class GameLauncherService {
       lastExitCode: null,
       lastError: "",
       lastLines: [],
+      startedAt: Date.now(),
+      lastStdoutAt: 0,
+      lastStderrAt: 0,
+      lastOutputAt: Date.now(),
+      lineCount: 0,
+      lastLifecycleEvent: "spawned",
       javaPathSelected: javaExec,
       javaPathTried: this.lastGameStatus?.javaPathTried || [],
       updatedAt: Date.now(),
     };
 
     const pushLine = (prefix, raw) => {
+      const now = Date.now();
       const lines = String(raw || "").split(/\r?\n/).map((x) => x.trim()).filter(Boolean);
       for (const ln of lines) {
         this.lastGameStatus.lastLines.push(`${prefix}${ln}`);
+        this.lastGameStatus.lineCount += 1;
+      }
+      if (lines.length > 0) {
+        this.lastGameStatus.lastOutputAt = now;
+        if (prefix) {
+          this.lastGameStatus.lastStderrAt = now;
+          this.lastGameStatus.lastLifecycleEvent = "stderr_data";
+        } else {
+          this.lastGameStatus.lastStdoutAt = now;
+          this.lastGameStatus.lastLifecycleEvent = "stdout_data";
+        }
       }
       if (this.lastGameStatus.lastLines.length > 120) {
         this.lastGameStatus.lastLines.splice(0, this.lastGameStatus.lastLines.length - 120);
       }
-      this.lastGameStatus.updatedAt = Date.now();
+      this.lastGameStatus.updatedAt = now;
     };
 
     if (child.stdout) child.stdout.on("data", (d) => pushLine("", d.toString("utf8")));
@@ -942,6 +1164,7 @@ class GameLauncherService {
       this.runningGameProcess = null;
       this.lastGameStatus.running = false;
       this.lastGameStatus.lastExitCode = Number.isFinite(code) ? code : null;
+      this.lastGameStatus.lastLifecycleEvent = "closed";
       this.lastGameStatus.updatedAt = Date.now();
     });
 
@@ -949,6 +1172,7 @@ class GameLauncherService {
       this.runningGameProcess = null;
       this.lastGameStatus.running = false;
       this.lastGameStatus.lastError = String(error?.message || error || "Error al iniciar Java.");
+      this.lastGameStatus.lastLifecycleEvent = "error";
       this.lastGameStatus.updatedAt = Date.now();
     });
 
@@ -964,11 +1188,20 @@ class GameLauncherService {
         const recent = this.lastGameStatus.lastLines.slice(-12).join("\n");
         finish({ ok: false, error: `El proceso Java terminó con código ${code}. ${recent}`.trim() });
       });
-      setTimeout(() => finish({ ok: true, pid: child.pid, status: "stable" }), 6500);
+      setTimeout(() => {
+        this.lastGameStatus.lastLifecycleEvent = "stable_6_5s";
+        this.lastGameStatus.updatedAt = Date.now();
+        finish({ ok: true, pid: child.pid, status: "stable" });
+      }, 6500);
     });
   }
 
   getGameRuntimeStatus() {
+    const now = Date.now();
+    const thresholdMs = this.getRuntimeStallThresholdMs();
+    const lastOutputAt = Number(this.lastGameStatus?.lastOutputAt || 0);
+    const silenceMs = lastOutputAt > 0 ? Math.max(0, now - lastOutputAt) : 0;
+    const stalled = Boolean(this.lastGameStatus?.running) && silenceMs >= thresholdMs;
     return {
       ok: true,
       running: Boolean(this.lastGameStatus?.running),
@@ -976,6 +1209,15 @@ class GameLauncherService {
       lastExitCode: this.lastGameStatus?.lastExitCode ?? null,
       lastError: this.lastGameStatus?.lastError || "",
       lastErrorLines: Array.isArray(this.lastGameStatus?.lastLines) ? this.lastGameStatus.lastLines.slice(-12).join("\n") : "",
+      startedAt: this.lastGameStatus?.startedAt || 0,
+      lastStdoutAt: this.lastGameStatus?.lastStdoutAt || 0,
+      lastStderrAt: this.lastGameStatus?.lastStderrAt || 0,
+      lastOutputAt,
+      lineCount: Number(this.lastGameStatus?.lineCount || 0),
+      lastLifecycleEvent: this.lastGameStatus?.lastLifecycleEvent || "",
+      stallThresholdMs: thresholdMs,
+      silenceMs,
+      stalled,
       javaPathTried: Array.isArray(this.lastGameStatus?.javaPathTried) ? this.lastGameStatus.javaPathTried : [],
       javaPathSelected: this.lastGameStatus?.javaPathSelected || "",
       updatedAt: this.lastGameStatus?.updatedAt || Date.now(),
