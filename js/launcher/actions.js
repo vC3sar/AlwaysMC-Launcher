@@ -1,10 +1,21 @@
 (function(){
   const NS = (window.MCBetaLauncher = window.MCBetaLauncher || {});
+  const LISTENER_STORE_KEY = "__mcBetaListeners";
+
+  function bindEvent(node, eventName, handler, options = undefined) {
+    if (!node || typeof node.addEventListener !== "function" || typeof handler !== "function") return;
+    if (!node[LISTENER_STORE_KEY]) node[LISTENER_STORE_KEY] = new Map();
+    const key = `${eventName}`;
+    const prev = node[LISTENER_STORE_KEY].get(key);
+    if (prev) node.removeEventListener(eventName, prev.handler, prev.options);
+    node.addEventListener(eventName, handler, options);
+    node[LISTENER_STORE_KEY].set(key, { handler, options });
+  }
 
   function bindClick(id, handler) {
     const node = document.getElementById(id);
     if (!node) return;
-    node.addEventListener("click", handler);
+    bindEvent(node, "click", handler);
   }
 
   NS.actions = {
@@ -79,24 +90,24 @@
         }
       });
 
-      if (ctx.dom.bgVideoModeSelect) ctx.dom.bgVideoModeSelect.addEventListener("change", () => ctx.applyLauncherBackgroundVideo(ctx.dom.bgVideoModeSelect.value));
-      if (ctx.dom.playTabBotBtn) ctx.dom.playTabBotBtn.addEventListener("click", () => ctx.switchPlayTab("bot"));
-      if (ctx.dom.playTabJavaBtn) ctx.dom.playTabJavaBtn.addEventListener("click", async () => { ctx.switchPlayTab("java"); await ctx.ensureJavaCatalogLoadedOnce(); });
-      if (ctx.dom.gameDistributionSelect) ctx.dom.gameDistributionSelect.addEventListener("change", async () => { ctx.updateFilterVisibilityByDistribution(); ctx.refreshVersionSelect(); await ctx.loadGameCatalog(true); });
-      if (ctx.dom.gameVersionSelect) ctx.dom.gameVersionSelect.addEventListener("change", () => { ctx.persistCurrentVersionSelection(); });
-      if (ctx.dom.gameVersionSelect) ctx.dom.gameVersionSelect.addEventListener("dblclick", async () => { await ctx.launchSelectedGameFromUI(); });
-      if (ctx.dom.filterRelease) ctx.dom.filterRelease.addEventListener("change", async () => { ctx.versionTypeFilters.release = Boolean(ctx.dom.filterRelease.checked); ctx.refreshVersionSelect(); await ctx.loadGameCatalog(true); });
-      if (ctx.dom.filterSnapshot) ctx.dom.filterSnapshot.addEventListener("change", async () => { ctx.versionTypeFilters.snapshot = Boolean(ctx.dom.filterSnapshot.checked); ctx.refreshVersionSelect(); await ctx.loadGameCatalog(true); });
-      if (ctx.dom.filterOldBeta) ctx.dom.filterOldBeta.addEventListener("change", async () => { ctx.versionTypeFilters.old_beta = Boolean(ctx.dom.filterOldBeta.checked); ctx.refreshVersionSelect(); await ctx.loadGameCatalog(true); });
-      if (ctx.dom.filterOldAlpha) ctx.dom.filterOldAlpha.addEventListener("change", async () => { ctx.versionTypeFilters.old_alpha = Boolean(ctx.dom.filterOldAlpha.checked); ctx.refreshVersionSelect(); await ctx.loadGameCatalog(true); });
-      if (ctx.dom.gameAuthModeSelect) ctx.dom.gameAuthModeSelect.addEventListener("change", () => {
+      if (ctx.dom.bgVideoModeSelect) bindEvent(ctx.dom.bgVideoModeSelect, "change", () => ctx.applyLauncherBackgroundVideo(ctx.dom.bgVideoModeSelect.value));
+      if (ctx.dom.playTabBotBtn) bindEvent(ctx.dom.playTabBotBtn, "click", () => ctx.switchPlayTab("bot"));
+      if (ctx.dom.playTabJavaBtn) bindEvent(ctx.dom.playTabJavaBtn, "click", async () => { ctx.switchPlayTab("java"); await ctx.ensureJavaCatalogLoadedOnce(); });
+      if (ctx.dom.gameDistributionSelect) bindEvent(ctx.dom.gameDistributionSelect, "change", async () => { ctx.updateFilterVisibilityByDistribution(); ctx.refreshVersionSelect(); await ctx.loadGameCatalog(true); });
+      if (ctx.dom.gameVersionSelect) bindEvent(ctx.dom.gameVersionSelect, "change", () => { ctx.persistCurrentVersionSelection(); });
+      if (ctx.dom.gameVersionSelect) bindEvent(ctx.dom.gameVersionSelect, "dblclick", async () => { await ctx.launchSelectedGameFromUI(); });
+      if (ctx.dom.filterRelease) bindEvent(ctx.dom.filterRelease, "change", async () => { ctx.versionTypeFilters.release = Boolean(ctx.dom.filterRelease.checked); ctx.refreshVersionSelect(); await ctx.loadGameCatalog(true); });
+      if (ctx.dom.filterSnapshot) bindEvent(ctx.dom.filterSnapshot, "change", async () => { ctx.versionTypeFilters.snapshot = Boolean(ctx.dom.filterSnapshot.checked); ctx.refreshVersionSelect(); await ctx.loadGameCatalog(true); });
+      if (ctx.dom.filterOldBeta) bindEvent(ctx.dom.filterOldBeta, "change", async () => { ctx.versionTypeFilters.old_beta = Boolean(ctx.dom.filterOldBeta.checked); ctx.refreshVersionSelect(); await ctx.loadGameCatalog(true); });
+      if (ctx.dom.filterOldAlpha) bindEvent(ctx.dom.filterOldAlpha, "change", async () => { ctx.versionTypeFilters.old_alpha = Boolean(ctx.dom.filterOldAlpha.checked); ctx.refreshVersionSelect(); await ctx.loadGameCatalog(true); });
+      if (ctx.dom.gameAuthModeSelect) bindEvent(ctx.dom.gameAuthModeSelect, "change", () => {
         if (String(ctx.dom.gameAuthModeSelect.value || "offline") === "microsoft") {
           ctx.dom.gameAuthModeSelect.value = "offline";
           ctx.setGameStatus("Microsoft/Premium está deshabilitado temporalmente.", true);
         }
         ctx.updateAuthModeUI();
       });
-      if (ctx.dom.msAccountSelect) ctx.dom.msAccountSelect.addEventListener("change", async () => {
+      if (ctx.dom.msAccountSelect) bindEvent(ctx.dom.msAccountSelect, "change", async () => {
         if (!ctx.launcherAPI || typeof ctx.launcherAPI.setActiveAuthSession !== "function") return;
         const id = String(ctx.dom.msAccountSelect.value || "");
         if (!id) return;
@@ -105,11 +116,11 @@
         ctx.setMsActiveAccountId(id);
         ctx.renderMsAccounts();
       });
-      if (ctx.dom.gameJavaPathInput) ctx.dom.gameJavaPathInput.addEventListener("change", async () => { await ctx.persistLaunchOptionsToConfig(); });
-      if (ctx.dom.gameMinMemoryInput) ctx.dom.gameMinMemoryInput.addEventListener("change", async () => { await ctx.persistLaunchOptionsToConfig(); });
-      if (ctx.dom.gameMaxMemoryInput) ctx.dom.gameMaxMemoryInput.addEventListener("change", async () => { await ctx.persistLaunchOptionsToConfig(); });
-      if (ctx.dom.gameExtraJvmArgsInput) ctx.dom.gameExtraJvmArgsInput.addEventListener("change", async () => { await ctx.persistLaunchOptionsToConfig(); });
-      if (ctx.dom.gameExtraGameArgsInput) ctx.dom.gameExtraGameArgsInput.addEventListener("change", async () => { await ctx.persistLaunchOptionsToConfig(); });
+      if (ctx.dom.gameJavaPathInput) bindEvent(ctx.dom.gameJavaPathInput, "change", async () => { await ctx.persistLaunchOptionsToConfig(); });
+      if (ctx.dom.gameMinMemoryInput) bindEvent(ctx.dom.gameMinMemoryInput, "change", async () => { await ctx.persistLaunchOptionsToConfig(); });
+      if (ctx.dom.gameMaxMemoryInput) bindEvent(ctx.dom.gameMaxMemoryInput, "change", async () => { await ctx.persistLaunchOptionsToConfig(); });
+      if (ctx.dom.gameExtraJvmArgsInput) bindEvent(ctx.dom.gameExtraJvmArgsInput, "change", async () => { await ctx.persistLaunchOptionsToConfig(); });
+      if (ctx.dom.gameExtraGameArgsInput) bindEvent(ctx.dom.gameExtraGameArgsInput, "change", async () => { await ctx.persistLaunchOptionsToConfig(); });
 
       ctx.switchPlayTab("bot");
       if (ctx.dom.gameAuthModeSelect) ctx.dom.gameAuthModeSelect.value = "offline";

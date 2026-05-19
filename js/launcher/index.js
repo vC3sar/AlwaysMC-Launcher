@@ -77,6 +77,19 @@ const MAIN_MENU_BUTTON_IDS = ["menu-play-btn", "menu-config-btn", "menu-info-btn
 const BG_1080_SRC = "mp4/menu-main.mp4";
 const BG_2K_SRC = "mp4/2k-menu-main.mp4";
 const BG_4K_SRC = "mp4/4k-menu-main.mp4";
+const LISTENER_STORE_KEY = "__mcBetaListeners";
+
+function bindEvent(node, eventName, handler, options = undefined) {
+  if (!node || typeof node.addEventListener !== "function" || typeof handler !== "function") return;
+  if (!node[LISTENER_STORE_KEY]) node[LISTENER_STORE_KEY] = new Map();
+  const key = `${eventName}`;
+  const prev = node[LISTENER_STORE_KEY].get(key);
+  if (prev) {
+    node.removeEventListener(eventName, prev.handler, prev.options);
+  }
+  node.addEventListener(eventName, handler, options);
+  node[LISTENER_STORE_KEY].set(key, { handler, options });
+}
 
 function revealWindowWhenMenuReady() {
   document.body.style.visibility = "visible";
@@ -878,7 +891,7 @@ async function bootNewProfile() {
 function bindClick(id, handler) {
   const node = document.getElementById(id);
   if (!node) return;
-  node.addEventListener("click", handler);
+  bindEvent(node, "click", handler);
 }
 
 function initLauncherMenu() {
@@ -1141,7 +1154,7 @@ else initLauncherMenu();
 menuAudioMuted = loadMenuAudioMutedPreference();
 
 if (launcherAudioToggle) {
-  launcherAudioToggle.addEventListener("click", () => {
+  bindEvent(launcherAudioToggle, "click", () => {
     menuAudioMuted = !menuAudioMuted;
     saveMenuAudioMutedPreference();
     updateMenuAudioToggle();
@@ -1164,8 +1177,8 @@ if (launcherAPI) {
 }
 
 if (launcherBgVideo) {
-  window.addEventListener("resize", () => { if (currentBgVideoMode === "auto") applyLauncherBackgroundVideo("auto"); });
-  document.addEventListener("fullscreenchange", () => { if (currentBgVideoMode === "auto") applyLauncherBackgroundVideo("auto"); });
+  bindEvent(window, "resize", () => { if (currentBgVideoMode === "auto") applyLauncherBackgroundVideo("auto"); });
+  bindEvent(document, "fullscreenchange", () => { if (currentBgVideoMode === "auto") applyLauncherBackgroundVideo("auto"); });
 }
 
 if (NS.navigation && typeof NS.navigation.setupKeyboard === "function") {
