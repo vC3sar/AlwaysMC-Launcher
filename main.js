@@ -1,12 +1,13 @@
 const { app, BrowserWindow, ipcMain, Menu } = require("electron");
 const fs = require("fs");
 const path = require("path");
+console.log("[Main] main.js cargado - proceso principal activo");
 
 const DEFAULT_SERVER = "mc.haliacraft.com";
 const PROFILE_FILE = path.join(__dirname, "profiles.json");
 const CONFIG_FILE = path.join(__dirname, "config.json");
 
-let botStarted = false;
+let botRunner = null;
 let mainWindow = null;
 
 function parseHostAndPort(hostInput, portInput) {
@@ -77,10 +78,31 @@ function saveProfile(profile) {
   saveJson(PROFILE_FILE, { ...profile, mode: "nogui" });
 }
 
-function startBot(profile) {
-  if (botStarted) return { ok: true };
-  botStarted = true;
-  require("./minelight")(profile);
+async function stopBotSession() {
+  if (!botRunner) return;
+  try {
+    if (typeof botRunner.stop === "function") {
+      await botRunner.stop();
+    }
+  } catch (error) {
+    console.log("[Main] stopBotSession error:", error && error.message ? error.message : String(error));
+  } finally {
+    botRunner = null;
+  }
+}
+
+async function startBot(profile) {
+  if (botRunner && typeof botRunner.stop === "function") {
+    await stopBotSession();
+  }
+  console.log("[Main] startBot() solicitado", {
+    username: profile?.username,
+    ip: profile?.ip,
+    port: profile?.port,
+    version: profile?.version,
+  });
+  botRunner = require("./minelight")(profile);
+  console.log("[Main] minelight inicializado");
   return { ok: true };
 }
 
@@ -147,24 +169,45 @@ function getMainWindow() {
 
 ipcMain.handle("launcher:getLastProfile", () => loadProfile());
 
-ipcMain.handle("launcher:startContinue", () => {
+ipcMain.handle("launcher:startContinue", async () => {
+  console.log("[Main] IPC launcher:startContinue");
   const profile = loadProfile();
   if (!profile) {
+    console.log("[Main] startContinue cancelado: no hay perfil guardado");
     return { ok: false, error: "No existe perfil guardado." };
   }
   saveProfile(profile);
-  startBot(profile);
+  console.log("[Main] startContinue profile listo", {
+    username: profile.username,
+    ip: profile.ip,
+    port: profile.port,
+    version: profile.version,
+  });
+  await startBot(profile);
   return { ok: true, profile };
 });
 
-ipcMain.handle("launcher:startNew", (_, profileInput) => {
+ipcMain.handle("launcher:startNew", async (_, profileInput) => {
+  console.log("[Main] IPC launcher:startNew", {
+    username: profileInput?.username,
+    ip: profileInput?.ip,
+    port: profileInput?.port,
+    version: profileInput?.version,
+  });
   const normalized = normalizeProfile(profileInput);
   if (!normalized) {
+    console.log("[Main] startNew cancelado: perfil inválido");
     return { ok: false, error: "Perfil invalido. Verifica nickname y servidor." };
   }
 
   saveProfile(normalized);
-  startBot(normalized);
+  console.log("[Main] startNew profile normalizado", {
+    username: normalized.username,
+    ip: normalized.ip,
+    port: normalized.port,
+    version: normalized.version,
+  });
+  await startBot(normalized);
   return { ok: true, profile: normalized };
 });
 
@@ -195,8 +238,29 @@ ipcMain.handle("window:getFullscreen", () => {
   const win = getMainWindow();
   return { ok: true, isFullscreen: win ? win.isFullScreen() : false };
 });
+ipcMain.handle("app:quit", () => {
+  console.log("[Main] app:quit solicitado");
+  app.quit();
+  return { ok: true };
+});
+ipcMain.handle("app:returnToLauncher", () => {
+  console.log("[Main] app:returnToLauncher solicitado");
+  return stopBotSession()
+    .then(() => {
+      if (mainWindow && !mainWindow.isDestroyed()) {
+        return mainWindow.loadFile(path.join(__dirname, "launcher.html")).then(() => ({ ok: true }));
+      }
+      const win = getMainWindow();
+      if (win && !win.isDestroyed()) {
+        return win.loadFile(path.join(__dirname, "launcher.html")).then(() => ({ ok: true }));
+      }
+      return { ok: false, error: "No hay ventana activa." };
+    })
+    .catch((error) => ({ ok: false, error: error && error.message ? error.message : String(error) }));
+});
 
 app.whenReady().then(() => {
+  console.log("[Main] app.whenReady()");
   createWindow();
 
   app.on("activate", () => {
@@ -207,4 +271,3 @@ app.whenReady().then(() => {
 app.on("window-all-closed", () => {
   if (process.platform !== "darwin") app.quit();
 });
-

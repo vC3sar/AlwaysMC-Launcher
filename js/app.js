@@ -30,8 +30,13 @@ const menuBusy = document.getElementById("menu-busy");
 const sidebarKicker = document.querySelector(".sidebar-kicker");
 const menuCloseBtn = document.getElementById("menu-close-btn");
 const inventoryButton = document.getElementById("inventory-button");
+const endSessionButton = document.getElementById("end-session-button");
 const hudHealth = document.getElementById("hud-health");
 const hudFood = document.getElementById("hud-food");
+
+if (window.lucide && typeof window.lucide.createIcons === "function") {
+  window.lucide.createIcons({ icons: window.lucide.icons, attrs: { width: 16, height: 16, "stroke-width": 2.2 } });
+}
 
 function revealWindowWhenMenuReady() {
   document.body.style.visibility = "visible";
@@ -363,6 +368,24 @@ inventoryButton.addEventListener("click", () => {
   clearMenu();
   sendSocketMessage({ type: "inventoryRequest" });
 });
+if (endSessionButton) {
+  endSessionButton.addEventListener("click", async () => {
+    endSessionButton.disabled = true;
+    endSessionButton.title = "Saliendo de la partida...";
+    manualSocketClose = true;
+    try {
+      if (ws && ws.readyState === WebSocket.OPEN) ws.close();
+      if (launcherAPI && typeof launcherAPI.returnToLauncher === "function") {
+        const result = await launcherAPI.returnToLauncher();
+        if (!result?.ok) throw new Error(result?.error || "No se pudo volver al launcher.");
+        return;
+      }
+      window.location.href = "launcher.html";
+    } catch {
+      window.location.href = "launcher.html";
+    }
+  });
+}
 
 input.addEventListener("keydown", (e) => {
   if (e.key === "ArrowUp") { e.preventDefault(); stepInputHistory(-1); return; }

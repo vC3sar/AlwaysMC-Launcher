@@ -8,6 +8,73 @@ body {
     background: radial-gradient(circle at center, #252527 0%, #07071b 100%);
 }
 
+:root {
+    --scrollbar-size: 11px;
+    --scrollbar-track: rgba(8, 8, 10, 0.62);
+    --scrollbar-thumb: linear-gradient(180deg, rgba(201, 123, 95, 0.92), rgba(132, 62, 52, 0.92));
+    --scrollbar-thumb-hover: linear-gradient(180deg, rgba(223, 149, 120, 0.95), rgba(162, 77, 64, 0.95));
+    --scrollbar-border: rgba(245, 208, 111, 0.28);
+}
+
+html,
+body,
+#launcher-config-view,
+#chat,
+#sidebar,
+#menu-panel {
+    scrollbar-width: thin;
+    scrollbar-color: rgba(186, 103, 83, 0.95) rgba(10, 10, 13, 0.56);
+}
+
+html::-webkit-scrollbar,
+body::-webkit-scrollbar,
+#launcher-config-view::-webkit-scrollbar,
+#chat::-webkit-scrollbar,
+#sidebar::-webkit-scrollbar,
+#menu-panel::-webkit-scrollbar {
+    width: var(--scrollbar-size);
+    height: var(--scrollbar-size);
+}
+
+html::-webkit-scrollbar-track,
+body::-webkit-scrollbar-track,
+#launcher-config-view::-webkit-scrollbar-track,
+#chat::-webkit-scrollbar-track,
+#sidebar::-webkit-scrollbar-track,
+#menu-panel::-webkit-scrollbar-track {
+    background: var(--scrollbar-track);
+    border-radius: 999px;
+}
+
+html::-webkit-scrollbar-thumb,
+body::-webkit-scrollbar-thumb,
+#launcher-config-view::-webkit-scrollbar-thumb,
+#chat::-webkit-scrollbar-thumb,
+#sidebar::-webkit-scrollbar-thumb,
+#menu-panel::-webkit-scrollbar-thumb {
+    background: var(--scrollbar-thumb);
+    border: 1px solid var(--scrollbar-border);
+    border-radius: 999px;
+}
+
+html::-webkit-scrollbar-thumb:hover,
+body::-webkit-scrollbar-thumb:hover,
+#launcher-config-view::-webkit-scrollbar-thumb:hover,
+#chat::-webkit-scrollbar-thumb:hover,
+#sidebar::-webkit-scrollbar-thumb:hover,
+#menu-panel::-webkit-scrollbar-thumb:hover {
+    background: var(--scrollbar-thumb-hover);
+}
+
+html::-webkit-scrollbar-corner,
+body::-webkit-scrollbar-corner,
+#launcher-config-view::-webkit-scrollbar-corner,
+#chat::-webkit-scrollbar-corner,
+#sidebar::-webkit-scrollbar-corner,
+#menu-panel::-webkit-scrollbar-corner {
+    background: transparent;
+}
+
 .launcher-overlay {
     position: fixed;
     inset: 0;
@@ -60,7 +127,7 @@ body {
 }
 
 .launcher-shell {
-    width: min(560px, 90vw);
+    width: min(500px, 88vw);
     border: 1px solid rgba(192, 63, 63, 0.35);
     border-radius: 14px;
     padding: 16px;
@@ -68,6 +135,10 @@ body {
     box-shadow: 0 30px 80px rgba(0, 0, 0, 0.62);
     position: relative;
     z-index: 1;
+}
+
+.launcher-shell.main-compact {
+    width: min(430px, 88vw);
 }
 
 .launcher-brand {
@@ -123,9 +194,61 @@ body {
     background: rgba(137, 62, 51, 0.28);
 }
 
+.launcher-btn.nav-active {
+    border-color: rgba(245, 208, 111, 0.82);
+    background: rgba(170, 76, 60, 0.36);
+    box-shadow: 0 0 0 2px rgba(245, 208, 111, 0.22), 0 12px 24px rgba(0, 0, 0, 0.25);
+}
+
+#launcher-config-view .launcher-nav-active,
+#launcher-play-view .launcher-nav-active,
+#launcher-info-view .launcher-nav-active {
+    border-color: rgba(245, 208, 111, 0.82) !important;
+    box-shadow: 0 0 0 2px rgba(245, 208, 111, 0.22);
+}
+
+.launcher-controls-hint {
+    position: absolute;
+    left: 0;
+    right: 0;
+    bottom: 8px;
+    z-index: 2;
+    display: none;
+    align-items: center;
+    justify-content: center;
+    gap: 14px;
+    padding: 6px 12px;
+    background: transparent;
+    color: rgba(241, 227, 209, 0.92);
+    font-size: 12px;
+    letter-spacing: 0.02em;
+    white-space: nowrap;
+    pointer-events: none;
+}
+
+.launcher-controls-hint.visible {
+    display: flex;
+}
+
+.launcher-control-item {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    opacity: 0.9;
+}
+
+.launcher-control-item i {
+    width: 14px;
+    height: 14px;
+}
+
 .launcher-btn.alt {
     text-align: center;
     width: clamp(180px, 22vw, 260px);
+}
+
+#menu-exit-btn {
+    margin-top: calc((12px + 44px) / 2);
 }
 
 #continue-last-btn,
@@ -301,7 +424,7 @@ body {
 
 .vitals-hud {
     display: grid;
-    grid-template-columns: 1fr 1fr;
+    grid-template-columns: 1fr 1fr auto;
     gap: 10px;
     margin-bottom: 10px;
 }
@@ -334,6 +457,33 @@ body {
     font-size: 13px;
     font-weight: 700;
     color: #f8fafc;
+}
+
+.hud-end-session-btn {
+    width: 36px;
+    height: 36px;
+    align-self: center;
+    justify-self: end;
+    border: 1px solid rgba(239, 68, 68, 0.26);
+    background: rgba(239, 68, 68, 0.1);
+    color: #fca5a5;
+    border-radius: 10px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    transition: background 0.2s ease, border-color 0.2s ease, color 0.2s ease, opacity 0.2s ease;
+}
+
+.hud-end-session-btn:hover {
+    background: rgba(239, 68, 68, 0.16);
+    border-color: rgba(239, 68, 68, 0.4);
+    color: #fecaca;
+}
+
+.hud-end-session-btn:disabled {
+    opacity: 0.65;
+    cursor: wait;
 }
 
 #chat {
@@ -964,8 +1114,12 @@ body {
 }
 
 @media (max-width: 700px) {
+    .launcher-shell {
+        width: min(500px, 92vw);
+    }
+
     .vitals-hud {
-        grid-template-columns: 1fr;
+        grid-template-columns: 1fr 1fr auto;
         gap: 8px;
     }
 

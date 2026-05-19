@@ -9,6 +9,7 @@ const launcherMainMenu = document.getElementById("launcher-main-menu");
 const launcherPlayView = document.getElementById("launcher-play-view");
 const launcherConfigView = document.getElementById("launcher-config-view");
 const launcherInfoView = document.getElementById("launcher-info-view");
+const launcherControlsHint = document.getElementById("launcher-controls-hint");
 
 let gameStarted = false;
 let menuAudioMuted = false;
@@ -16,15 +17,22 @@ let menuAudioPlayPromise = null;
 let menuAudioUnlockBound = false;
 let currentBgVideoMode = "auto";
 let currentBgVideoSrc = "";
+let currentLauncherView = "main";
+let activeMainMenuIndex = 0;
+let activeConfigIndex = 0;
+let activePlayIndex = 0;
+let activeInfoIndex = 0;
+const MENU_AUDIO_MUTED_STORAGE_KEY = "launcher.menuAudioMuted";
+const MAIN_MENU_BUTTON_IDS = ["menu-play-btn", "menu-config-btn", "menu-info-btn", "menu-fullscreen-btn", "menu-exit-btn"];
 
 const BG_1080_SRC = "mp4/menu-main.mp4";
 const BG_2K_SRC = "mp4/2k-menu-main.mp4";
-const BG_4K_SRC = "mp4/4k-main-menu.mp4";
+const BG_4K_SRC = "mp4/4k-menu-main.mp4";
 
 function revealWindowWhenMenuReady() {
   document.body.style.visibility = "visible";
   if (launcherAPI && typeof launcherAPI.menuReady === "function") {
-    launcherAPI.menuReady().catch(() => {});
+    launcherAPI.menuReady().catch(() => { });
   }
 }
 
@@ -50,7 +58,7 @@ function applyLauncherBackgroundVideo(mode = currentBgVideoMode) {
   currentBgVideoSrc = selected;
   launcherBgVideo.src = selected;
   launcherBgVideo.load();
-  launcherBgVideo.play().catch(() => {});
+  launcherBgVideo.play().catch(() => { });
 }
 
 function startMenuAudio(force = false) {
@@ -82,6 +90,22 @@ function setupMenuAudioUnlockListeners() {
   events.forEach((eventName) => document.addEventListener(eventName, unlock, true));
 }
 
+function loadMenuAudioMutedPreference() {
+  try {
+    return window.localStorage.getItem(MENU_AUDIO_MUTED_STORAGE_KEY) === "true";
+  } catch {
+    return false;
+  }
+}
+
+function saveMenuAudioMutedPreference() {
+  try {
+    window.localStorage.setItem(MENU_AUDIO_MUTED_STORAGE_KEY, String(menuAudioMuted));
+  } catch {
+    // Ignorar errores de almacenamiento.
+  }
+}
+
 function updateMenuAudioToggle() {
   if (!launcherAudioToggle || !launcherMenuAudio) return;
   launcherMenuAudio.muted = menuAudioMuted;
@@ -98,12 +122,113 @@ function setLauncherStatus(text, isError = false) {
   launcherStatus.dataset.kind = isError ? "error" : "ok";
 }
 
+function getMainMenuButtons() {
+  return MAIN_MENU_BUTTON_IDS.map((id) => document.getElementById(id)).filter(Boolean);
+}
+
+function setMainMenuSelection(index) {
+  const buttons = getMainMenuButtons();
+  if (!buttons.length) return;
+  const normalized = ((index % buttons.length) + buttons.length) % buttons.length;
+  activeMainMenuIndex = normalized;
+  buttons.forEach((button, idx) => button.classList.toggle("nav-active", idx === normalized));
+  buttons[normalized].focus({ preventScroll: true });
+}
+
+function setLauncherMainMenuControlsVisible(visible) {
+  if (!launcherControlsHint) return;
+  launcherControlsHint.classList.toggle("visible", Boolean(visible));
+}
+
+function getConfigNavigableElements() {
+  if (!launcherConfigView) return [];
+  return Array.from(launcherConfigView.querySelectorAll("input, select, button")).filter((element) => {
+    if (element.disabled) return false;
+    if (element.type === "hidden") return false;
+    return element.offsetParent !== null;
+  });
+}
+
+function setConfigSelection(index) {
+  const elements = getConfigNavigableElements();
+  if (!elements.length) return;
+  const normalized = ((index % elements.length) + elements.length) % elements.length;
+  activeConfigIndex = normalized;
+  elements.forEach((element, idx) => element.classList.toggle("launcher-nav-active", idx === normalized));
+  const target = elements[normalized];
+  target.focus({ preventScroll: true });
+  target.scrollIntoView({ block: "nearest", inline: "nearest", behavior: "smooth" });
+}
+
+function getPlayNavigableElements() {
+  if (!launcherPlayView) return [];
+  return Array.from(launcherPlayView.querySelectorAll("input, select, button")).filter((element) => {
+    if (element.disabled) return false;
+    if (element.type === "hidden") return false;
+    return element.offsetParent !== null;
+  });
+}
+
+function setPlaySelection(index) {
+  const elements = getPlayNavigableElements();
+  if (!elements.length) return;
+  const normalized = ((index % elements.length) + elements.length) % elements.length;
+  activePlayIndex = normalized;
+  elements.forEach((element, idx) => element.classList.toggle("launcher-nav-active", idx === normalized));
+  const target = elements[normalized];
+  target.focus({ preventScroll: true });
+  target.scrollIntoView({ block: "nearest", inline: "nearest", behavior: "smooth" });
+}
+
+function getInfoNavigableElements() {
+  if (!launcherInfoView) return [];
+  return Array.from(launcherInfoView.querySelectorAll("button")).filter((element) => {
+    if (element.disabled) return false;
+    return element.offsetParent !== null;
+  });
+}
+
+function setInfoSelection(index) {
+  const elements = getInfoNavigableElements();
+  if (!elements.length) return;
+  const normalized = ((index % elements.length) + elements.length) % elements.length;
+  activeInfoIndex = normalized;
+  elements.forEach((element, idx) => element.classList.toggle("launcher-nav-active", idx === normalized));
+  const target = elements[normalized];
+  target.focus({ preventScroll: true });
+  target.scrollIntoView({ block: "nearest", inline: "nearest", behavior: "smooth" });
+}
+
 function showLauncherView(view) {
+  currentLauncherView = view;
   startMenuAudio();
   launcherMainMenu.style.display = view === "main" ? "flex" : "none";
+  const launcherShell = document.querySelector(".launcher-shell");
+  if (launcherShell) launcherShell.classList.toggle("main-compact", view === "main");
   launcherPlayView.classList.toggle("visible", view === "play");
   launcherConfigView.classList.toggle("visible", view === "config");
   launcherInfoView.classList.toggle("visible", view === "info");
+  setLauncherMainMenuControlsVisible(view === "main" || view === "play" || view === "config" || view === "info");
+  if (view === "main") {
+    setMainMenuSelection(0);
+  } else {
+    getMainMenuButtons().forEach((button) => button.classList.remove("nav-active"));
+  }
+  if (view === "config") {
+    setConfigSelection(0);
+  } else {
+    getConfigNavigableElements().forEach((element) => element.classList.remove("launcher-nav-active"));
+  }
+  if (view === "play") {
+    setPlaySelection(0);
+  } else {
+    getPlayNavigableElements().forEach((element) => element.classList.remove("launcher-nav-active"));
+  }
+  if (view === "info") {
+    setInfoSelection(0);
+  } else {
+    getInfoNavigableElements().forEach((element) => element.classList.remove("launcher-nav-active"));
+  }
   setLauncherStatus("");
 }
 
@@ -173,6 +298,11 @@ async function toggleFullscreenMode() {
   if (btn && state?.ok) btn.textContent = state.isFullscreen ? "Salir de pantalla completa (F11)" : "Pantalla completa (F11)";
 }
 
+async function quitApplication() {
+  if (!launcherAPI || typeof launcherAPI.quitApp !== "function") return;
+  await launcherAPI.quitApp();
+}
+
 function startPanelSession() {
   if (gameStarted) return;
   gameStarted = true;
@@ -228,6 +358,7 @@ function initLauncherMenu() {
   bindClick("menu-config-btn", openConfigView);
   bindClick("menu-info-btn", openInfoView);
   bindClick("menu-fullscreen-btn", toggleFullscreenMode);
+  bindClick("menu-exit-btn", quitApplication);
   bindClick("play-back-btn", () => showLauncherView("main"));
   bindClick("config-back-btn", () => showLauncherView("main"));
   bindClick("info-back-btn", () => showLauncherView("main"));
@@ -253,10 +384,12 @@ function initLauncherMenu() {
 }
 
 initLauncherMenu();
+menuAudioMuted = loadMenuAudioMutedPreference();
 
 if (launcherAudioToggle) {
   launcherAudioToggle.addEventListener("click", () => {
     menuAudioMuted = !menuAudioMuted;
+    saveMenuAudioMutedPreference();
     updateMenuAudioToggle();
     if (!menuAudioMuted) startMenuAudio(true);
   });
@@ -285,6 +418,128 @@ document.addEventListener("keydown", (event) => {
   if (event.key === "F11") {
     event.preventDefault();
     toggleFullscreenMode();
+    return;
+  }
+
+  if (currentLauncherView === "main") {
+    if (event.key === "ArrowUp" || event.key === "ArrowLeft") {
+      event.preventDefault();
+      setMainMenuSelection(activeMainMenuIndex - 1);
+      return;
+    }
+
+    if (event.key === "ArrowDown" || event.key === "ArrowRight") {
+      event.preventDefault();
+      setMainMenuSelection(activeMainMenuIndex + 1);
+      return;
+    }
+
+    if (event.key === "Enter") {
+      event.preventDefault();
+      const buttons = getMainMenuButtons();
+      if (!buttons.length) return;
+      const target = buttons[activeMainMenuIndex];
+      if (target) target.click();
+      return;
+    }
+
+    if (event.key === "Escape") {
+      event.preventDefault();
+    }
+    return;
+  }
+
+  if (currentLauncherView === "config") {
+    if (event.key === "ArrowUp" || event.key === "ArrowLeft") {
+      event.preventDefault();
+      setConfigSelection(activeConfigIndex - 1);
+      return;
+    }
+
+    if (event.key === "ArrowDown" || event.key === "ArrowRight") {
+      event.preventDefault();
+      setConfigSelection(activeConfigIndex + 1);
+      return;
+    }
+
+    if (event.key === "Enter") {
+      const elements = getConfigNavigableElements();
+      if (!elements.length) return;
+      const active = elements[activeConfigIndex];
+      if (!active) return;
+      if (active.tagName === "BUTTON") {
+        event.preventDefault();
+        active.click();
+      }
+      return;
+    }
+
+    if (event.key === "Escape") {
+      event.preventDefault();
+      showLauncherView("main");
+    }
+    return;
+  }
+
+  if (currentLauncherView === "play") {
+    if (event.key === "ArrowUp" || event.key === "ArrowLeft") {
+      event.preventDefault();
+      setPlaySelection(activePlayIndex - 1);
+      return;
+    }
+
+    if (event.key === "ArrowDown" || event.key === "ArrowRight") {
+      event.preventDefault();
+      setPlaySelection(activePlayIndex + 1);
+      return;
+    }
+
+    if (event.key === "Enter") {
+      const elements = getPlayNavigableElements();
+      if (!elements.length) return;
+      const active = elements[activePlayIndex];
+      if (!active) return;
+      if (active.tagName === "BUTTON") {
+        event.preventDefault();
+        active.click();
+      }
+      return;
+    }
+
+    if (event.key === "Escape") {
+      event.preventDefault();
+      showLauncherView("main");
+    }
+    return;
+  }
+
+  if (currentLauncherView === "info") {
+    if (event.key === "ArrowUp" || event.key === "ArrowLeft") {
+      event.preventDefault();
+      setInfoSelection(activeInfoIndex - 1);
+      return;
+    }
+
+    if (event.key === "ArrowDown" || event.key === "ArrowRight") {
+      event.preventDefault();
+      setInfoSelection(activeInfoIndex + 1);
+      return;
+    }
+
+    if (event.key === "Enter") {
+      const elements = getInfoNavigableElements();
+      if (!elements.length) return;
+      const active = elements[activeInfoIndex];
+      if (!active) return;
+      event.preventDefault();
+      active.click();
+      return;
+    }
+
+    if (event.key === "Escape") {
+      event.preventDefault();
+      showLauncherView("main");
+    }
   }
 });
 
@@ -292,7 +547,7 @@ if (launcherAPI && typeof launcherAPI.getFullscreen === "function") {
   launcherAPI.getFullscreen().then((state) => {
     const btn = document.getElementById("menu-fullscreen-btn");
     if (btn && state?.ok) btn.textContent = state.isFullscreen ? "Salir de pantalla completa (F11)" : "Pantalla completa (F11)";
-  }).catch(() => {});
+  }).catch(() => { });
 }
 
 revealWindowWhenMenuReady();

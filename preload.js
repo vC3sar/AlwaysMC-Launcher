@@ -10,4 +10,6 @@ contextBridge.exposeInMainWorld("launcherAPI", {
   menuReady: () => ipcRenderer.invoke("launcher:menuReady"),
   toggleFullscreen: () => ipcRenderer.invoke("window:toggleFullscreen"),
   getFullscreen: () => ipcRenderer.invoke("window:getFullscreen"),
+  quitApp: () => ipcRenderer.invoke("app:quit"),
+  returnToLauncher: () => ipcRenderer.invoke("app:returnToLauncher"),
 });

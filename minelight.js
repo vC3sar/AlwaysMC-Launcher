@@ -9,7 +9,7 @@ const { getArmorDestination, isLikelyFood } = require("./src/bot/menu");
 const { sanitizeVisibleText: sanitizeVisibleTextShared } = require("./src/bot/minecraft-text");
 const { createWSServerConfig } = require("./src/bot/ws-server");
 const { words: ignoredMessages } = require("./config/ignore.json");
-const { setPresence } = require("./fn/discord");
+const { initDiscordPresence, updateDiscordPresence, shutdownDiscordPresence } = require("./fn/discord");
 const appConfig = require("./config.json");
 
 module.exports = function (profile) {
@@ -17,6 +17,7 @@ module.exports = function (profile) {
   const port = Number.parseInt(profile.port ?? "25565", 10) || 25565;
   const sessionId = `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
   const launcherConfig = appConfig && typeof appConfig.launcher === "object" ? appConfig.launcher : {};
+  const discordClientId = String(appConfig?.clientId || "").trim();
   const reconnectDelayMs = Number.parseInt(launcherConfig.reconnectDelayMs || "650", 10) || 650;
   const authRecoveryWindowMs = Number.parseInt(launcherConfig.authRecoveryWindowMs || "30000", 10) || 30000;
   const maxReconnectAttempts = Number.parseInt(launcherConfig.maxReconnectAttempts || "6", 10) || 6;
@@ -98,6 +99,22 @@ module.exports = function (profile) {
   const ENABLE_CHAT_KEEPALIVE = false;
   const DEBUG_LIFECYCLE = String(debugLifecycleSetting).toLowerCase() !== "0";
   const lifecycleStartAt = Date.now();
+  let discordPresenceClosed = false;
+  let shuttingDown = false;
+  let keepAliveInterval = null;
+  const wsIntervals = new Set();
+  let wss = null;
+  let rl = null;
+
+  function closeDiscordPresence() {
+    if (discordPresenceClosed) return;
+    discordPresenceClosed = true;
+    shutdownDiscordPresence();
+  }
+
+  function isShuttingDown() {
+    return shuttingDown;
+  }
 
   function debugLog(event, details = "") {
     if (!DEBUG_LIFECYCLE) {
@@ -108,6 +125,16 @@ module.exports = function (profile) {
     const suffix = details ? ` | ${details}` : "";
     console.log(`[DEBUG +${elapsed}ms] ${event}${suffix}`);
   }
+
+  console.log(
+    `[DiscordRPC] bootstrap desde minelight: verboseMode=${verboseMode} debugLifecycle=${DEBUG_LIFECYCLE ? "1" : "0"} clientIdLen=${discordClientId.length}`
+  );
+  initDiscordPresence({
+    clientId: discordClientId,
+    verboseMode,
+    debugLifecycle: DEBUG_LIFECYCLE,
+  });
+  updateDiscordPresence({ serverIp: "Esperando servidor...", version: getActiveVersion(), username });
 
   function isIgnored(message) {
     const text = String(message ?? "");
@@ -303,6 +330,9 @@ module.exports = function (profile) {
   }
 
   function scheduleAdaptiveReconnect({ reasonType, phase, reasonText, resetVersionCycle = false }) {
+    if (isShuttingDown()) {
+      return true;
+    }
     if (!velocityCompatMode) {
       return false;
     }
@@ -344,6 +374,9 @@ module.exports = function (profile) {
   }
 
   function handleDisconnectEvent(eventType, { reasonText = "", loggedIn = null } = {}) {
+    if (isShuttingDown()) {
+      return true;
+    }
     const wasReady = botReady;
     const classification = classifyDisconnectEvent({ eventType, reasonText, loggedIn, wasReady });
     const details = `reasonType=${classification.reasonType} phase=${classification.phase} sinceSpawn=${classification.sinceSpawn} sinceAuth=${classification.sinceAuth}`;
@@ -366,6 +399,9 @@ module.exports = function (profile) {
   }
 
   function createBotInstance() {
+    if (isShuttingDown()) {
+      return bot;
+    }
     debugLog("bot:create", `host=${ip} version=${getActiveVersion()} ready=${botReady} attempt=${currentVersionIndex + 1}/${versionCandidates.length}`);
     if (bot) {
       try {
@@ -396,6 +432,9 @@ module.exports = function (profile) {
     maxAttempts = maxReconnectAttempts,
     showOffline = false,
   } = {}) {
+    if (isShuttingDown()) {
+      return;
+    }
     if (reconnectInProgress) {
       debugLog("reconnect:ignored", "already in progress");
       return;
@@ -767,8 +806,8 @@ module.exports = function (profile) {
 
       slots = Array.isArray(rawSlots)
         ? rawSlots
-            .map((item, slot) => serializeItem(item, slot))
-            .filter(Boolean)
+          .map((item, slot) => serializeItem(item, slot))
+          .filter(Boolean)
         : [];
     } catch (error) {
       if (handleMenuReadError(error, "menu:serialize")) {
@@ -913,7 +952,7 @@ module.exports = function (profile) {
   }
 
   // MANAGE COMMANDS FROM TERMINAL
-  const rl = readline.createInterface({
+  rl = readline.createInterface({
     input: process.stdin,
     output: process.stdout,
     prompt: "> ",
@@ -924,7 +963,7 @@ module.exports = function (profile) {
 
   // WebSocket local para el panel Electron (sin servir UI por HTTP)
   const wsConfig = createWSServerConfig();
-  const wss = new WebSocket.Server({ port: wsConfig.port });
+  wss = new WebSocket.Server({ port: wsConfig.port });
   wss.on("listening", () => {
     console.log("🔌 WebSocket local del panel en ws://127.0.0.1:3000");
   });
@@ -963,6 +1002,7 @@ module.exports = function (profile) {
         }
       }
     }, 10000);
+    wsIntervals.add(interval);
 
     // Recibir mensajes del cliente web y enviarlos al chat del bot
     ws.on("message", (msg) => {
@@ -1106,6 +1146,7 @@ module.exports = function (profile) {
       webClients.delete(ws);
       personalInventoryTokens.delete(ws);
       clearInterval(interval);
+      wsIntervals.delete(interval);
       console.log("❌ Cliente web desconectado");
     });
   });
@@ -1115,7 +1156,7 @@ module.exports = function (profile) {
   // Evitamos enviar /ping automáticamente porque en algunos servidores
   // se interpreta como comando real y puede provocar kicks o errores internos.
   if (ENABLE_CHAT_KEEPALIVE) {
-    setInterval(() => {
+    keepAliveInterval = setInterval(() => {
       if (menuTransitionLocked) return;
       if (bot.player) return bot.chat("/ping");
     }, 24000);
@@ -1163,7 +1204,7 @@ module.exports = function (profile) {
       clearReconnectTimer();
       menuTransitionLocked = false;
       setMenuTransitionLocked(false);
-      setPresence(`${ip} - ${getActiveVersion()}`);
+      updateDiscordPresence({ serverIp: ip, version: getActiveVersion(), username: currentBot.username || username });
       currentBot.settings.chat = "enabled";
       refreshVitalsFromBot();
       broadcastSidebarState("online");
@@ -1311,20 +1352,86 @@ module.exports = function (profile) {
     });
   }
 
-  process.on("uncaughtException", (err) => {
+  const onUncaughtException = (err) => {
     if (handleMenuReadError(err, "process:uncaughtException")) {
       return;
     }
     console.log("❌ UncaughtException:", err);
-  });
-  process.on("unhandledRejection", (reason, promise) => {
+    closeDiscordPresence();
+  };
+  const onUnhandledRejection = (reason, promise) => {
     if (handleMenuReadError(reason, "process:unhandledRejection")) {
       return;
     }
     console.log("❌ UnhadleRejection:", promise, "reason:", reason);
-  });
+    closeDiscordPresence();
+  };
+  const onProcessExit = () => {
+    closeDiscordPresence();
+  };
+  process.on("uncaughtException", onUncaughtException);
+  process.on("unhandledRejection", onUnhandledRejection);
+  process.on("exit", onProcessExit);
+
+  async function stop() {
+    if (shuttingDown) return;
+    shuttingDown = true;
+    reconnectInProgress = false;
+    menuTransitionLocked = false;
+    clearReconnectTimer();
+    cancelMenuRefresh();
+    if (menuTransitionTimer) {
+      clearTimeout(menuTransitionTimer);
+      menuTransitionTimer = null;
+    }
+    if (keepAliveInterval) {
+      clearInterval(keepAliveInterval);
+      keepAliveInterval = null;
+    }
+    for (const interval of wsIntervals) {
+      clearInterval(interval);
+    }
+    wsIntervals.clear();
+    for (const ws of webClients) {
+      try { ws.close(); } catch { }
+    }
+    webClients.clear();
+    personalInventoryTokens.clear();
+    detachWindowRealtime();
+    closeMenu();
+
+    if (wss) {
+      await new Promise((resolve) => {
+        try {
+          wss.close(() => resolve());
+        } catch {
+          resolve();
+        }
+      });
+      wss = null;
+    }
+
+    if (rl) {
+      try { rl.close(); } catch { }
+      rl = null;
+    }
+
+    process.removeListener("uncaughtException", onUncaughtException);
+    process.removeListener("unhandledRejection", onUnhandledRejection);
+    process.removeListener("exit", onProcessExit);
+
+    if (bot) {
+      try {
+        bot.removeAllListeners();
+        bot.end("session_closed_by_user");
+      } catch { }
+      bot = null;
+    }
+
+    closeDiscordPresence();
+  }
 
   createBotInstance();
 
-  return bot; // por si luego lo quieres manipular desde fuera
+  return { stop };
 };

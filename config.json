@@ -12,6 +12,6 @@
     "maxReconnectAttempts": 6,
     "reconnectBackoffMaxMs": 4000,
     "reconnectJitterRatio": 0.2,
-    "menuBackgroundMode": "4k"
+    "menuBackgroundMode": "auto"
   }
 }
