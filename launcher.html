@@ -58,11 +58,19 @@
           <div class="launcher-helper-text">Selecciona modo y versión, luego pulsa Lanzar.</div>
           <div class="launcher-form launcher-java-layout">
             <section class="launcher-java-card">
-              <label for="game-auth-mode"><i data-lucide="key-round"></i><span>Modo de autenticación</span></label>
-              <select id="game-auth-mode">
-                <option value="offline">Offline</option>
-                <option value="microsoft" disabled>Microsoft (temporalmente deshabilitado)</option>
-              </select>
+              <div class="launcher-java-top-row">
+                <div class="launcher-java-field">
+                  <label for="game-username"><i data-lucide="user-round"></i><span>Nickname (offline)</span></label>
+                  <input id="game-username" type="text" placeholder="JugadorOffline">
+                </div>
+                <div class="launcher-java-field">
+                  <label for="game-auth-mode"><i data-lucide="key-round"></i><span>Modo de autenticación</span></label>
+                  <select id="game-auth-mode">
+                    <option value="offline">Offline</option>
+                    <option value="microsoft" disabled>Microsoft (temporalmente deshabilitado)</option>
+                  </select>
+                </div>
+              </div>
 
               <label for="game-distribution"><i data-lucide="layers"></i><span>Distribución</span></label>
               <select id="game-distribution">
@@ -70,9 +78,6 @@
                 <option value="fabric">Fabric</option>
                 <option value="forge">Forge</option>
               </select>
-
-              <label for="game-username"><i data-lucide="user-round"></i><span>Nickname (offline)</span></label>
-              <input id="game-username" type="text" placeholder="JugadorOffline">
 
               <div id="ms-auth-panel" class="launcher-ms-auth-panel hidden">
                 <label for="ms-account-select"><i data-lucide="user-check"></i><span>Cuenta Microsoft activa</span></label>
@@ -164,8 +169,8 @@
           <label for="cfg-reconnect-jitter">Reconnect Jitter Ratio</label>
           <input id="cfg-reconnect-jitter" type="number" min="0" max="1" step="0.05" placeholder="0.2">
 
-          <label class="launcher-check"><input id="cfg-velocity-compat" type="checkbox"><span>Velocity Compat Mode</span></label>
-          <label class="launcher-check"><input id="cfg-debug-lifecycle" type="checkbox"><span>Debug Lifecycle</span></label>
+          <label class="launcher-check launcher-config-check"><input id="cfg-velocity-compat" type="checkbox"><span>Velocity Compat Mode</span></label>
+          <label class="launcher-check launcher-config-check"><input id="cfg-debug-lifecycle" type="checkbox"><span>Debug Lifecycle</span></label>
 
           <label for="cfg-verbose-mode">Verbose (solo consola Electron)</label>
           <select id="cfg-verbose-mode"><option value="app">Solo logs de app</option><option value="all">App + bot/server/chat/system</option></select>
