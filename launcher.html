@@ -61,7 +61,7 @@
               <label for="game-auth-mode"><i data-lucide="key-round"></i><span>Modo de autenticación</span></label>
               <select id="game-auth-mode">
                 <option value="offline">Offline</option>
-                <option value="microsoft">Microsoft (pendiente)</option>
+                <option value="microsoft" disabled>Microsoft (temporalmente deshabilitado)</option>
               </select>
 
               <label for="game-distribution"><i data-lucide="layers"></i><span>Distribución</span></label>
@@ -73,6 +73,17 @@
 
               <label for="game-username"><i data-lucide="user-round"></i><span>Nickname (offline)</span></label>
               <input id="game-username" type="text" placeholder="JugadorOffline">
+
+              <div id="ms-auth-panel" class="launcher-ms-auth-panel hidden">
+                <label for="ms-account-select"><i data-lucide="user-check"></i><span>Cuenta Microsoft activa</span></label>
+                <select id="ms-account-select"></select>
+                <div class="launcher-row">
+                  <button type="button" id="ms-login-btn" class="launcher-link"><i data-lucide="log-in"></i><span>Iniciar sesión</span></button>
+                  <button type="button" id="ms-logout-btn" class="launcher-link"><i data-lucide="log-out"></i><span>Cerrar sesión</span></button>
+                  <button type="button" id="ms-remove-btn" class="launcher-link"><i data-lucide="user-minus"></i><span>Quitar cuenta</span></button>
+                </div>
+                <div id="ms-auth-status" class="launcher-status" data-kind="ok"></div>
+              </div>
             </section>
 
             <section class="launcher-java-card">

@@ -26,6 +26,13 @@
     }
   },
   "auth": {
-    "microsoft": null
+    "microsoft": {
+      "tenant": "consumers",
+      "clientId": "",
+      "redirectStrategy": "loopback",
+      "loginTimeoutMs": 180000,
+      "accounts": [],
+      "activeAccountId": null
+    }
   }
 }

@@ -75,7 +75,15 @@ function mergeLauncherDefaults(raw) {
     },
   };
   if (!cfg.auth || typeof cfg.auth !== "object") cfg.auth = {};
-  if (!cfg.auth.microsoft || typeof cfg.auth.microsoft !== "object") cfg.auth.microsoft = null;
+  const ms = cfg.auth.microsoft && typeof cfg.auth.microsoft === "object" ? cfg.auth.microsoft : {};
+  cfg.auth.microsoft = {
+    tenant: String(ms.tenant || "consumers").trim() || "consumers",
+    clientId: String(ms.clientId || "").trim(),
+    redirectStrategy: "loopback",
+    loginTimeoutMs: Number.parseInt(String(ms.loginTimeoutMs || "180000"), 10) || 180000,
+    accounts: Array.isArray(ms.accounts) ? ms.accounts : [],
+    activeAccountId: String(ms.activeAccountId || "").trim() || null,
+  };
   return cfg;
 }
 
@@ -364,6 +372,18 @@ ipcMain.handle("auth:msLogout", async () => {
 ipcMain.handle("auth:getSession", async () => {
   if (!gameLauncher) return { ok: false, error: "Servicio de launcher no inicializado." };
   return gameLauncher.getAuthSession();
+});
+ipcMain.handle("auth:listSessions", async () => {
+  if (!gameLauncher) return { ok: false, error: "Servicio de launcher no inicializado." };
+  return gameLauncher.listAuthSessions();
+});
+ipcMain.handle("auth:setActiveSession", async (_, accountId) => {
+  if (!gameLauncher) return { ok: false, error: "Servicio de launcher no inicializado." };
+  return gameLauncher.setActiveAuthSession(String(accountId || ""));
+});
+ipcMain.handle("auth:removeSession", async (_, accountId) => {
+  if (!gameLauncher) return { ok: false, error: "Servicio de launcher no inicializado." };
+  return gameLauncher.removeAuthSession(String(accountId || ""));
 });
 
 app.whenReady().then(() => {

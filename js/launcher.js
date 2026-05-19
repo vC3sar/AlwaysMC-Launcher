@@ -14,6 +14,12 @@ const gameAuthModeSelect = document.getElementById("game-auth-mode");
 const gameDistributionSelect = document.getElementById("game-distribution");
 const gameVersionSelect = document.getElementById("game-version-select");
 const gameUsernameInput = document.getElementById("game-username");
+const msAuthPanel = document.getElementById("ms-auth-panel");
+const msAccountSelect = document.getElementById("ms-account-select");
+const msLoginBtn = document.getElementById("ms-login-btn");
+const msLogoutBtn = document.getElementById("ms-logout-btn");
+const msRemoveBtn = document.getElementById("ms-remove-btn");
+const msAuthStatus = document.getElementById("ms-auth-status");
 const gameJavaPathInput = document.getElementById("game-java-path");
 const gameMinMemoryInput = document.getElementById("game-min-memory-mb");
 const gameMaxMemoryInput = document.getElementById("game-max-memory-mb");
@@ -52,6 +58,9 @@ let activeInstallId = "";
 let installPollTimer = null;
 let activePlayTab = "bot";
 let javaSectionCatalogLoaded = false;
+let msAuthState = { accounts: [], activeAccountId: null };
+let catalogRequestSeq = 0;
+let lastAppliedCatalogRequest = 0;
 const versionTypeFilters = {
   release: true,
   snapshot: false,
@@ -165,6 +174,72 @@ function setGameStatus(text, isError = false) {
   gameInstallStatus.dataset.kind = isError ? "error" : "ok";
 }
 
+function setMsAuthStatus(text, isError = false) {
+  if (!msAuthStatus) return;
+  msAuthStatus.textContent = text || "";
+  msAuthStatus.dataset.kind = isError ? "error" : "ok";
+}
+
+function getSelectedMsAccount() {
+  const id = String(msAccountSelect?.value || "").trim();
+  if (!id) return null;
+  return (msAuthState.accounts || []).find((a) => String(a.id) === id) || null;
+}
+
+function renderMsAccounts() {
+  if (!msAccountSelect) return;
+  const accounts = Array.isArray(msAuthState.accounts) ? msAuthState.accounts : [];
+  msAccountSelect.innerHTML = "";
+  if (!accounts.length) {
+    const option = document.createElement("option");
+    option.value = "";
+    option.textContent = "Sin cuentas";
+    msAccountSelect.appendChild(option);
+    msAccountSelect.disabled = true;
+    setMsAuthStatus("No hay sesión Microsoft activa.", true);
+    return;
+  }
+  accounts.forEach((a) => {
+    const option = document.createElement("option");
+    option.value = String(a.id || "");
+    option.textContent = `${a.minecraftUsername || a.displayName || a.username || "Cuenta"} (${a.username || "sin correo"})`;
+    msAccountSelect.appendChild(option);
+  });
+  const target = String(msAuthState.activeAccountId || "");
+  if (target && Array.from(msAccountSelect.options).some((o) => o.value === target)) msAccountSelect.value = target;
+  msAccountSelect.disabled = false;
+  const active = getSelectedMsAccount();
+  setMsAuthStatus(active ? `Activa: ${active.minecraftUsername || active.displayName || active.username}` : "Cuenta activa no encontrada.", !active);
+}
+
+async function refreshMsSessions() {
+  if (!launcherAPI || typeof launcherAPI.listAuthSessions !== "function") return;
+  const res = await launcherAPI.listAuthSessions();
+  if (!res?.ok) {
+    setMsAuthStatus(res?.error || "No se pudieron cargar cuentas Microsoft.", true);
+    return;
+  }
+  msAuthState = {
+    accounts: Array.isArray(res.accounts) ? res.accounts : [],
+    activeAccountId: String(res.activeAccountId || "").trim() || null,
+  };
+  renderMsAccounts();
+}
+
+function updateAuthModeUI() {
+  let authMode = String(gameAuthModeSelect?.value || "offline");
+  if (authMode === "microsoft" && gameAuthModeSelect) {
+    gameAuthModeSelect.value = "offline";
+    authMode = "offline";
+  }
+  const isMs = authMode === "microsoft";
+  if (gameUsernameInput) {
+    gameUsernameInput.disabled = isMs;
+    gameUsernameInput.placeholder = isMs ? "Se usa el usuario de tu cuenta Microsoft" : "JugadorOffline";
+  }
+  if (msAuthPanel) msAuthPanel.classList.toggle("hidden", !isMs);
+}
+
 function getDistributionEntries() {
   const dist = String(gameDistributionSelect?.value || "vanilla");
   if (dist === "fabric") return gameCatalog.fabric || [];
@@ -252,13 +327,25 @@ function persistCurrentVersionSelection() {
   if (!payload || !payload.versionId) return;
   const all = loadLastGameSelections();
   all[payload.distribution] = payload;
+  all.__last = payload;
   saveLastGameSelections(all);
+}
+
+function restoreRememberedDistribution() {
+  const rememberedAll = loadLastGameSelections();
+  const last = rememberedAll?.__last || null;
+  if (!last || !gameDistributionSelect) return;
+  const dist = String(last.distribution || "").trim();
+  if (!dist) return;
+  const allowed = ["vanilla", "fabric", "forge"];
+  if (!allowed.includes(dist)) return;
+  gameDistributionSelect.value = dist;
 }
 
 function refreshVersionSelect() {
   if (!gameVersionSelect) return;
   const entries = applyVersionFilters(getDistributionEntries(), String(gameDistributionSelect?.value || "vanilla"), versionTypeFilters);
-  const current = gameVersionSelect.value;
+  const previous = gameVersionSelect.value;
   const currentDistribution = String(gameDistributionSelect?.value || "vanilla");
   const remembered = loadLastGameSelections()?.[currentDistribution] || null;
   gameVersionSelect.innerHTML = "";
@@ -274,12 +361,14 @@ function refreshVersionSelect() {
     option.dataset.type = entry.type || "";
     gameVersionSelect.appendChild(option);
   });
-  if (current) gameVersionSelect.value = current;
-  if ((!gameVersionSelect.value || gameVersionSelect.selectedIndex < 0) && remembered?.versionId) {
+  const hasOption = (value) => Array.from(gameVersionSelect.options).some((opt) => opt.value === String(value));
+  if (remembered?.versionId && hasOption(remembered.versionId)) {
     gameVersionSelect.value = String(remembered.versionId);
+  } else if (previous && hasOption(previous)) {
+    gameVersionSelect.value = String(previous);
+  } else if (gameVersionSelect.options.length > 0) {
+    gameVersionSelect.selectedIndex = 0;
   }
-  if (!gameVersionSelect.value && gameVersionSelect.options.length > 0) gameVersionSelect.selectedIndex = 0;
-  if (gameVersionSelect.value) persistCurrentVersionSelection();
   if (gameVersionSelect.options.length === 0) {
     setGameStatus("Sin resultados para los filtros seleccionados.", true);
   }
@@ -289,7 +378,15 @@ function applyVersionFilters(entries, distribution, filters) {
   if (!Array.isArray(entries)) return [];
   const dist = String(distribution || "vanilla");
   if (dist !== "vanilla") return entries;
-  return entries.filter((entry) => Boolean(filters[String(entry.type || "release")]));  
+  return entries.filter((entry) => {
+    const type = String(entry.type || "release");
+    if (!Boolean(filters[type])) return false;
+    const id = String(entry.id || "");
+    const match = id.match(/^1\.(\d+)(?:\.(\d+))?$/);
+    if (!match) return true;
+    const minor = Number.parseInt(match[1], 10);
+    return Number.isFinite(minor) ? minor >= 8 : true;
+  });
 }
 
 function syncVersionTypeFiltersUI() {
@@ -326,7 +423,9 @@ async function launchSelectedGameFromUI() {
     versionId,
     loaderVersion,
     authMode,
-    username: String(gameUsernameInput?.value || "JugadorOffline").trim() || "JugadorOffline",
+    username: authMode === "microsoft"
+      ? (getSelectedMsAccount()?.minecraftUsername || "MicrosoftPlayer")
+      : (String(gameUsernameInput?.value || "JugadorOffline").trim() || "JugadorOffline"),
     javaPath: launchOptions.javaPath,
     minMemoryMb: launchOptions.minMemoryMb,
     maxMemoryMb: Math.max(launchOptions.minMemoryMb, launchOptions.maxMemoryMb),
@@ -359,6 +458,7 @@ function switchPlayTab(tab) {
 async function ensureJavaCatalogLoadedOnce() {
   if (javaSectionCatalogLoaded) return;
   await loadGameCatalog(true);
+  refreshVersionSelect();
   javaSectionCatalogLoaded = true;
 }
 
@@ -473,8 +573,11 @@ async function showRuntimeDiagnostics() {
 
 async function loadGameCatalog(forceRefresh = false) {
   if (!launcherAPI) return;
+  const requestId = ++catalogRequestSeq;
   setGameStatus(forceRefresh ? "Actualizando catálogo..." : "Cargando catálogo...");
   const result = forceRefresh ? await launcherAPI.refreshVersionCatalog() : await launcherAPI.getVersionCatalog();
+  if (requestId < lastAppliedCatalogRequest) return;
+  lastAppliedCatalogRequest = requestId;
   if (!result?.ok) {
     setGameStatus(result?.error || "No se pudo cargar el catálogo.", true);
     return;
@@ -597,7 +700,10 @@ function showLauncherView(view, options = {}) {
   startMenuAudio();
   launcherMainMenu.style.display = view === "main" ? "flex" : "none";
   const launcherShell = document.querySelector(".launcher-shell");
-  if (launcherShell) launcherShell.classList.toggle("main-compact", view === "main");
+  if (launcherShell) {
+    launcherShell.classList.toggle("main-compact", view === "main");
+    if (view !== "play") launcherShell.classList.remove("java-expanded");
+  }
   launcherPlayView.classList.toggle("visible", view === "play");
   launcherConfigView.classList.toggle("visible", view === "config");
   launcherInfoView.classList.toggle("visible", view === "info");
@@ -787,8 +893,11 @@ function initLauncherMenu() {
       const cfg = await launcherAPI.getConfig();
       loadLaunchOptionsFromConfig(cfg);
       if (!gameUsernameInput.value) gameUsernameInput.value = String(last?.username || "JugadorOffline");
+      restoreRememberedDistribution();
       syncVersionTypeFiltersUI();
       updateFilterVisibilityByDistribution();
+      await refreshMsSessions();
+      updateAuthModeUI();
       if (activePlayTab === "java") await ensureJavaCatalogLoadedOnce();
     }
   });
@@ -827,6 +936,33 @@ function initLauncherMenu() {
   bindClick("game-show-diagnostics-btn", async () => {
     await showRuntimeDiagnostics();
   });
+  bindClick("ms-login-btn", async () => {
+    if (!launcherAPI || typeof launcherAPI.msLogin !== "function") return;
+    setMsAuthStatus("Abriendo Microsoft Login...", false);
+    const res = await launcherAPI.msLogin();
+    if (!res?.ok) return setMsAuthStatus(res?.error || "No se pudo iniciar sesión Microsoft.", true);
+    await refreshMsSessions();
+    setGameStatus("Sesión Microsoft iniciada.");
+    updateAuthModeUI();
+  });
+  bindClick("ms-logout-btn", async () => {
+    if (!launcherAPI || typeof launcherAPI.msLogout !== "function") return;
+    const res = await launcherAPI.msLogout();
+    if (!res?.ok) return setMsAuthStatus(res?.error || "No se pudo cerrar sesión.", true);
+    await refreshMsSessions();
+    setGameStatus("Sesiones Microsoft cerradas.");
+    updateAuthModeUI();
+  });
+  bindClick("ms-remove-btn", async () => {
+    if (!launcherAPI || typeof launcherAPI.removeAuthSession !== "function") return;
+    const active = getSelectedMsAccount();
+    if (!active) return setMsAuthStatus("Selecciona una cuenta para quitar.", true);
+    const res = await launcherAPI.removeAuthSession(active.id);
+    if (!res?.ok) return setMsAuthStatus(res?.error || "No se pudo quitar cuenta.", true);
+    await refreshMsSessions();
+    setGameStatus("Cuenta Microsoft eliminada.");
+    updateAuthModeUI();
+  });
   bindClick("save-config-btn", async () => {
     if (!launcherAPI) return;
     try {
@@ -851,7 +987,6 @@ function initLauncherMenu() {
   if (gameDistributionSelect) gameDistributionSelect.addEventListener("change", async () => {
     updateFilterVisibilityByDistribution();
     refreshVersionSelect();
-    persistCurrentVersionSelection();
     await loadGameCatalog(true);
   });
   if (gameVersionSelect) gameVersionSelect.addEventListener("change", () => {
@@ -865,8 +1000,20 @@ function initLauncherMenu() {
   if (filterOldBeta) filterOldBeta.addEventListener("change", async () => { versionTypeFilters.old_beta = Boolean(filterOldBeta.checked); refreshVersionSelect(); await loadGameCatalog(true); });
   if (filterOldAlpha) filterOldAlpha.addEventListener("change", async () => { versionTypeFilters.old_alpha = Boolean(filterOldAlpha.checked); refreshVersionSelect(); await loadGameCatalog(true); });
   if (gameAuthModeSelect) gameAuthModeSelect.addEventListener("change", () => {
-    const authMode = String(gameAuthModeSelect.value || "offline");
-    if (gameUsernameInput) gameUsernameInput.disabled = authMode !== "offline";
+    if (String(gameAuthModeSelect.value || "offline") === "microsoft") {
+      gameAuthModeSelect.value = "offline";
+      setGameStatus("Microsoft/Premium está deshabilitado temporalmente.", true);
+    }
+    updateAuthModeUI();
+  });
+  if (msAccountSelect) msAccountSelect.addEventListener("change", async () => {
+    if (!launcherAPI || typeof launcherAPI.setActiveAuthSession !== "function") return;
+    const id = String(msAccountSelect.value || "");
+    if (!id) return;
+    const res = await launcherAPI.setActiveAuthSession(id);
+    if (!res?.ok) return setMsAuthStatus(res?.error || "No se pudo cambiar cuenta activa.", true);
+    msAuthState.activeAccountId = id;
+    renderMsAccounts();
   });
   if (gameJavaPathInput) gameJavaPathInput.addEventListener("change", async () => { await persistLaunchOptionsToConfig(); });
   if (gameMinMemoryInput) gameMinMemoryInput.addEventListener("change", async () => { await persistLaunchOptionsToConfig(); });
@@ -874,6 +1021,8 @@ function initLauncherMenu() {
   if (gameExtraJvmArgsInput) gameExtraJvmArgsInput.addEventListener("change", async () => { await persistLaunchOptionsToConfig(); });
   if (gameExtraGameArgsInput) gameExtraGameArgsInput.addEventListener("change", async () => { await persistLaunchOptionsToConfig(); });
   switchPlayTab("bot");
+  if (gameAuthModeSelect) gameAuthModeSelect.value = "offline";
+  updateAuthModeUI();
   showLauncherView("main");
 }
 

@@ -3,13 +3,19 @@ const fsp = require("fs/promises");
 const path = require("path");
 const os = require("os");
 const crypto = require("crypto");
+const http = require("http");
 const https = require("https");
 const { spawn, spawnSync } = require("child_process");
+const { URL } = require("url");
+const { shell, safeStorage } = require("electron");
+const { PublicClientApplication } = require("@azure/msal-node");
 
 const MC_MANIFEST_URL = "https://launchermeta.mojang.com/mc/game/version_manifest_v2.json";
 const FABRIC_GAMES_URL = "https://meta.fabricmc.net/v2/versions/game";
 const FABRIC_LOADERS_URL = "https://meta.fabricmc.net/v2/versions/loader";
 const FORGE_PROMOS_URL = "https://files.minecraftforge.net/net/minecraftforge/forge/promotions_slim.json";
+const MS_SCOPES = ["XboxLive.signin", "offline_access", "openid", "profile"];
+const MS_DEFAULT_TENANT = "consumers";
 
 function httpsGetBuffer(url, timeoutMs = 30000) {
   return new Promise((resolve, reject) => {
@@ -36,6 +42,43 @@ function httpsGetBuffer(url, timeoutMs = 30000) {
 async function fetchJson(url, timeoutMs = 30000) {
   const buf = await httpsGetBuffer(url, timeoutMs);
   return JSON.parse(buf.toString("utf8"));
+}
+
+async function httpsRequestJson(url, { method = "GET", headers = {}, body = null, timeoutMs = 30000 } = {}) {
+  return new Promise((resolve, reject) => {
+    const parsed = new URL(url);
+    const req = https.request(
+      {
+        protocol: parsed.protocol,
+        hostname: parsed.hostname,
+        port: parsed.port || undefined,
+        path: `${parsed.pathname}${parsed.search}`,
+        method,
+        timeout: timeoutMs,
+        headers: { "User-Agent": "MC-BETA/1.0", ...headers },
+      },
+      (res) => {
+        const chunks = [];
+        res.on("data", (d) => chunks.push(d));
+        res.on("end", () => {
+          try {
+            const raw = Buffer.concat(chunks).toString("utf8");
+            const asJson = raw ? JSON.parse(raw) : {};
+            if (res.statusCode < 200 || res.statusCode >= 300) {
+              return reject(new Error(`HTTP ${res.statusCode} for ${url}: ${raw}`));
+            }
+            return resolve(asJson);
+          } catch (error) {
+            return reject(error);
+          }
+        });
+      },
+    );
+    req.on("error", reject);
+    req.on("timeout", () => req.destroy(new Error(`Timeout calling ${url}`)));
+    if (body !== null && body !== undefined) req.write(body);
+    req.end();
+  });
 }
 
 async function ensureDir(dir) {
@@ -851,8 +894,17 @@ class GameLauncherService {
   async launchGame({ versionId = "", username = "Player", authMode = "offline", javaPath = "", minMemoryMb = 0, maxMemoryMb = 0, extraJvmArgs = "", extraGameArgs = "" } = {}) {
     const cleanVersion = String(versionId || "").trim();
     if (!cleanVersion) return { ok: false, error: "Versión requerida para lanzar." };
-    if (authMode === "microsoft") {
-      return { ok: false, error: "Microsoft OAuth aún no implementado en esta build." };
+    const isMsAuth = String(authMode || "").toLowerCase() === "microsoft";
+    let authProfile = {
+      username,
+      uuid: "00000000000000000000000000000000",
+      accessToken: "0",
+      userType: "legacy",
+    };
+    if (isMsAuth) {
+      const msRes = await this.resolveMicrosoftLaunchProfile();
+      if (!msRes.ok) return msRes;
+      authProfile = msRes.profile;
     }
 
     if (typeof this.stopBotSession === "function") {
@@ -913,14 +965,15 @@ class GameLauncherService {
       game_directory: minecraftDir,
       assets_root: path.join(minecraftDir, "assets"),
       assets_index_name: assetIndexId,
-      auth_uuid: "00000000000000000000000000000000",
-      auth_access_token: "0",
-      user_type: "legacy",
+      auth_uuid: authProfile.uuid,
+      auth_access_token: authProfile.accessToken,
+      user_type: authProfile.userType,
       version_type: String(versionMeta.type || "release"),
       user_properties: "{}",
       resolution_width: "1280",
       resolution_height: "720",
     };
+    replacements.auth_player_name = authProfile.username;
     const launchFeatures = {
       has_custom_resolution: true,
       is_demo_user: false,
@@ -1264,20 +1317,306 @@ class GameLauncherService {
   }
 
   getAuthSession() {
-    const cfg = this.loadConfig() || {};
-    return { ok: true, session: cfg?.auth?.microsoft || null };
+    const state = this.getMicrosoftState();
+    const active = state.activeAccountId ? state.accounts.find((a) => a.id === state.activeAccountId) || null : null;
+    return { ok: true, session: active, activeAccountId: state.activeAccountId, count: state.accounts.length };
   }
 
-  msLogin() {
-    return { ok: false, error: "Microsoft OAuth pendiente de implementación en esta build." };
+  listAuthSessions() {
+    const state = this.getMicrosoftState();
+    return { ok: true, accounts: state.accounts, activeAccountId: state.activeAccountId };
+  }
+
+  setActiveAuthSession(accountId) {
+    const id = String(accountId || "").trim();
+    if (!id) return { ok: false, error: "Cuenta requerida." };
+    const state = this.getMicrosoftState();
+    if (!state.accounts.find((a) => a.id === id)) return { ok: false, error: "Cuenta no encontrada." };
+    state.activeAccountId = id;
+    this.saveMicrosoftState(state);
+    return { ok: true, activeAccountId: id };
+  }
+
+  removeAuthSession(accountId) {
+    const id = String(accountId || "").trim();
+    if (!id) return { ok: false, error: "Cuenta requerida." };
+    const state = this.getMicrosoftState();
+    const next = state.accounts.filter((a) => a.id !== id);
+    state.accounts = next;
+    if (!next.length) state.activeAccountId = null;
+    else if (state.activeAccountId === id) state.activeAccountId = next[0].id;
+    this.saveMicrosoftState(state);
+    return { ok: true, accounts: state.accounts, activeAccountId: state.activeAccountId };
+  }
+
+  async msLogin() {
+    try {
+      const msCfg = this.getMicrosoftState();
+      if (!msCfg.clientId) {
+        return { ok: false, error: "Falta auth.microsoft.clientId en config.json." };
+      }
+
+      const callback = await this.startMicrosoftLoopbackServer(msCfg.loginTimeoutMs);
+      const redirectUri = callback.redirectUri;
+      const pca = new PublicClientApplication({
+        auth: {
+          clientId: msCfg.clientId,
+          authority: `https://login.microsoftonline.com/${msCfg.tenant || MS_DEFAULT_TENANT}`,
+        },
+      });
+      const tokenCache = pca.getTokenCache();
+      const authCodeUrl = await pca.getAuthCodeUrl({
+        scopes: MS_SCOPES,
+        redirectUri,
+        prompt: "select_account",
+      });
+      await shell.openExternal(authCodeUrl);
+      const authCode = await callback.waitForCode();
+      const tokenRes = await pca.acquireTokenByCode({
+        code: authCode,
+        scopes: MS_SCOPES,
+        redirectUri,
+      });
+      if (!tokenRes?.accessToken || !tokenRes?.account) {
+        return { ok: false, error: "No se obtuvo token de Microsoft." };
+      }
+
+      const mcAuth = await this.exchangeMicrosoftToMinecraft(tokenRes.accessToken);
+      const cacheBlob = tokenCache.serialize();
+      const account = this.buildMicrosoftAccountRecord(tokenRes, mcAuth, cacheBlob);
+      const next = this.upsertMicrosoftAccount(msCfg, account);
+      this.saveMicrosoftState(next);
+      return { ok: true, account, activeAccountId: next.activeAccountId };
+    } catch (error) {
+      return { ok: false, error: String(error?.message || error || "No se pudo iniciar sesión Microsoft.") };
+    }
   }
 
   msLogout() {
-    const cfg = this.loadConfig() || {};
-    if (!cfg.auth) cfg.auth = {};
-    cfg.auth.microsoft = null;
-    this.saveConfig(cfg);
+    const state = this.getMicrosoftState();
+    state.accounts = [];
+    state.activeAccountId = null;
+    this.saveMicrosoftState(state);
     return { ok: true };
+  }
+
+  getMicrosoftState() {
+    const cfg = this.loadConfig() || {};
+    if (!cfg.auth || typeof cfg.auth !== "object") cfg.auth = {};
+    const msRaw = cfg.auth.microsoft && typeof cfg.auth.microsoft === "object" ? cfg.auth.microsoft : {};
+    const state = {
+      tenant: String(msRaw.tenant || MS_DEFAULT_TENANT).trim() || MS_DEFAULT_TENANT,
+      clientId: String(msRaw.clientId || "").trim(),
+      redirectStrategy: "loopback",
+      loginTimeoutMs: Number.parseInt(String(msRaw.loginTimeoutMs || "180000"), 10) || 180000,
+      accounts: Array.isArray(msRaw.accounts) ? msRaw.accounts.filter((a) => a && typeof a === "object") : [],
+      activeAccountId: String(msRaw.activeAccountId || "").trim() || null,
+    };
+    if (!state.activeAccountId && state.accounts.length) state.activeAccountId = state.accounts[0].id;
+    return state;
+  }
+
+  saveMicrosoftState(state) {
+    const cfg = this.loadConfig() || {};
+    if (!cfg.auth || typeof cfg.auth !== "object") cfg.auth = {};
+    cfg.auth.microsoft = {
+      tenant: String(state.tenant || MS_DEFAULT_TENANT).trim() || MS_DEFAULT_TENANT,
+      clientId: String(state.clientId || "").trim(),
+      redirectStrategy: "loopback",
+      loginTimeoutMs: Number.parseInt(String(state.loginTimeoutMs || "180000"), 10) || 180000,
+      accounts: Array.isArray(state.accounts) ? state.accounts : [],
+      activeAccountId: String(state.activeAccountId || "").trim() || null,
+    };
+    this.saveConfig(cfg);
+  }
+
+  buildMicrosoftAccountRecord(tokenRes, mcAuth, rawCacheBlob) {
+    const account = tokenRes.account || {};
+    const homeAccountId = String(account.homeAccountId || "").trim();
+    const localAccountId = String(account.localAccountId || "").trim();
+    const id = homeAccountId || localAccountId || crypto.randomUUID();
+    const cacheEncrypted = safeStorage.isEncryptionAvailable()
+      ? safeStorage.encryptString(String(rawCacheBlob || "")).toString("base64")
+      : Buffer.from(String(rawCacheBlob || ""), "utf8").toString("base64");
+    return {
+      id,
+      homeAccountId,
+      localAccountId,
+      username: String(account.username || "").trim(),
+      displayName: String(account.name || account.username || "").trim(),
+      minecraftUuid: String(mcAuth.uuid || "").trim(),
+      minecraftUsername: String(mcAuth.username || "").trim(),
+      expiresOn: tokenRes.expiresOn ? new Date(tokenRes.expiresOn).toISOString() : null,
+      cacheEncrypted,
+      updatedAt: new Date().toISOString(),
+    };
+  }
+
+  upsertMicrosoftAccount(state, account) {
+    const next = { ...state, accounts: Array.isArray(state.accounts) ? [...state.accounts] : [] };
+    const idx = next.accounts.findIndex((a) => a.id === account.id);
+    if (idx >= 0) next.accounts[idx] = account;
+    else next.accounts.push(account);
+    next.activeAccountId = account.id;
+    return next;
+  }
+
+  async startMicrosoftLoopbackServer(timeoutMs) {
+    const server = http.createServer();
+    const loginTimeoutMs = Math.max(60000, Number(timeoutMs) || 180000);
+    let settle;
+    const done = new Promise((resolve, reject) => {
+      settle = { resolve, reject };
+    });
+
+    server.on("request", (req, res) => {
+      const reqUrl = new URL(req.url || "/", "http://127.0.0.1");
+      const code = reqUrl.searchParams.get("code");
+      const err = reqUrl.searchParams.get("error");
+      if (err) {
+        res.writeHead(400, { "Content-Type": "text/plain; charset=utf-8" });
+        res.end("Error de autenticación Microsoft. Puedes cerrar esta pestaña.");
+        settle.reject(new Error(reqUrl.searchParams.get("error_description") || err));
+        return;
+      }
+      if (code) {
+        res.writeHead(200, { "Content-Type": "text/plain; charset=utf-8" });
+        res.end("Autenticación completada. Ya puedes volver al launcher.");
+        settle.resolve(code);
+        return;
+      }
+      res.writeHead(404, { "Content-Type": "text/plain; charset=utf-8" });
+      res.end("Ruta no válida.");
+    });
+
+    await new Promise((resolve, reject) => {
+      server.once("error", reject);
+      server.listen(0, "127.0.0.1", resolve);
+    });
+    const addr = server.address();
+    const port = addr && typeof addr === "object" ? addr.port : 0;
+    const redirectUri = `http://127.0.0.1:${port}`;
+    const timer = setTimeout(() => {
+      settle.reject(new Error("Tiempo agotado esperando callback de Microsoft."));
+    }, loginTimeoutMs);
+
+    return {
+      redirectUri,
+      waitForCode: async () => {
+        try {
+          const code = await done;
+          return code;
+        } finally {
+          clearTimeout(timer);
+          server.close();
+        }
+      },
+    };
+  }
+
+  async exchangeMicrosoftToMinecraft(msAccessToken) {
+    const userAuth = await httpsRequestJson("https://user.auth.xboxlive.com/user/authenticate", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Accept: "application/json" },
+      body: JSON.stringify({
+        Properties: {
+          AuthMethod: "RPS",
+          SiteName: "user.auth.xboxlive.com",
+          RpsTicket: `d=${msAccessToken}`,
+        },
+        RelyingParty: "http://auth.xboxlive.com",
+        TokenType: "JWT",
+      }),
+    });
+    const userToken = String(userAuth?.Token || "");
+    const uhs = String(userAuth?.DisplayClaims?.xui?.[0]?.uhs || "");
+    if (!userToken || !uhs) throw new Error("No se pudo obtener token de Xbox Live.");
+
+    const xstsAuth = await httpsRequestJson("https://xsts.auth.xboxlive.com/xsts/authorize", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Accept: "application/json" },
+      body: JSON.stringify({
+        Properties: { SandboxId: "RETAIL", UserTokens: [userToken] },
+        RelyingParty: "rp://api.minecraftservices.com/",
+        TokenType: "JWT",
+      }),
+    });
+    const xstsToken = String(xstsAuth?.Token || "");
+    if (!xstsToken) throw new Error("No se pudo obtener XSTS token.");
+
+    const mcLogin = await httpsRequestJson("https://api.minecraftservices.com/authentication/login_with_xbox", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Accept: "application/json" },
+      body: JSON.stringify({
+        identityToken: `XBL3.0 x=${uhs};${xstsToken}`,
+      }),
+    });
+    const mcAccessToken = String(mcLogin?.access_token || "");
+    if (!mcAccessToken) throw new Error("No se obtuvo access token de Minecraft.");
+
+    const profile = await httpsRequestJson("https://api.minecraftservices.com/minecraft/profile", {
+      method: "GET",
+      headers: { Authorization: `Bearer ${mcAccessToken}`, Accept: "application/json" },
+    });
+    const uuid = String(profile?.id || "").trim();
+    const username = String(profile?.name || "").trim();
+    if (!uuid || !username) throw new Error("No se pudo resolver perfil de Minecraft. Verifica licencia Java en la cuenta.");
+    return { uuid, username, mcAccessToken };
+  }
+
+  decodeCacheBlob(account) {
+    const blobB64 = String(account?.cacheEncrypted || "");
+    if (!blobB64) throw new Error("Token cache ausente para la cuenta seleccionada.");
+    const raw = Buffer.from(blobB64, "base64");
+    if (safeStorage.isEncryptionAvailable()) {
+      return safeStorage.decryptString(raw);
+    }
+    return raw.toString("utf8");
+  }
+
+  async resolveMicrosoftLaunchProfile() {
+    const state = this.getMicrosoftState();
+    const active = state.activeAccountId ? state.accounts.find((a) => a.id === state.activeAccountId) : null;
+    if (!active) return { ok: false, error: "No hay cuenta Microsoft activa. Pulsa 'Iniciar sesión'." };
+    if (!state.clientId) return { ok: false, error: "Falta auth.microsoft.clientId en config.json." };
+    try {
+      const pca = new PublicClientApplication({
+        auth: {
+          clientId: state.clientId,
+          authority: `https://login.microsoftonline.com/${state.tenant || MS_DEFAULT_TENANT}`,
+        },
+      });
+      const cache = pca.getTokenCache();
+      cache.deserialize(this.decodeCacheBlob(active));
+      const all = await cache.getAllAccounts();
+      const msAccount = all.find((a) => String(a.homeAccountId || "") === String(active.homeAccountId || ""));
+      if (!msAccount) return { ok: false, error: "La sesión Microsoft local expiró. Inicia sesión nuevamente." };
+
+      const tokenRes = await pca.acquireTokenSilent({
+        account: msAccount,
+        scopes: MS_SCOPES,
+        forceRefresh: false,
+      });
+      if (!tokenRes?.accessToken) return { ok: false, error: "No se pudo refrescar el token Microsoft." };
+      const mcAuth = await this.exchangeMicrosoftToMinecraft(tokenRes.accessToken);
+      const updated = this.buildMicrosoftAccountRecord(tokenRes, mcAuth, cache.serialize());
+      const next = this.upsertMicrosoftAccount(state, updated);
+      this.saveMicrosoftState(next);
+      return {
+        ok: true,
+        profile: {
+          username: mcAuth.username,
+          uuid: mcAuth.uuid,
+          accessToken: mcAuth.mcAccessToken,
+          userType: "msa",
+        },
+      };
+    } catch (error) {
+      return {
+        ok: false,
+        error: `Sesión Microsoft inválida o revocada: ${String(error?.message || error)}. Vuelve a iniciar sesión.`,
+      };
+    }
   }
 }
 

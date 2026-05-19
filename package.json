@@ -11,6 +11,7 @@
   "license": "ISC",
   "description": "Offline/no premium Minecraft launcher with Mineflayer and Discord Rich Presence",
   "dependencies": {
+    "@azure/msal-node": "^3.8.1",
     "ansi-to-html": "^0.7.2",
     "discord-rpc": "^4.0.1",
     "fs": "^0.0.1-security",
