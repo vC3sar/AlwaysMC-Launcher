@@ -7,6 +7,14 @@ const { createRuntimeState } = require("./src/bot/state");
 const { extractVitals } = require("./src/bot/vitals");
 const { getArmorDestination, isLikelyFood } = require("./src/bot/menu");
 const { sanitizeVisibleText: sanitizeVisibleTextShared } = require("./src/bot/minecraft-text");
+const { resolveBotRuntimeConfig } = require("./src/bot/launcher-config");
+const {
+  decodeMinecraftText: decodeMinecraftTextShared,
+  extractModernDisplayData: extractModernDisplayDataShared,
+  isPartialReadError,
+  normalizeLore: normalizeLoreShared,
+  readItemComponent: readItemComponentShared,
+} = require("./src/bot/minecraft-components");
 const { createWSServerConfig } = require("./src/bot/ws-server");
 const { words: ignoredMessages } = require("./config/ignore.json");
 const { initDiscordPresence, updateDiscordPresence, shutdownDiscordPresence } = require("./fn/discord");
@@ -16,33 +24,22 @@ module.exports = function (profile) {
   const { username, version, ip } = profile;
   const port = Number.parseInt(profile.port ?? "25565", 10) || 25565;
   const sessionId = `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
-  const launcherConfig = appConfig && typeof appConfig.launcher === "object" ? appConfig.launcher : {};
-  const discordClientId = String(appConfig?.clientId || "").trim();
-  const reconnectDelayMs = Number.parseInt(launcherConfig.reconnectDelayMs || "650", 10) || 650;
-  const authRecoveryWindowMs = Number.parseInt(launcherConfig.authRecoveryWindowMs || "30000", 10) || 30000;
-  const maxReconnectAttempts = Number.parseInt(launcherConfig.maxReconnectAttempts || "6", 10) || 6;
-  const reconnectBackoffMaxMs = Number.parseInt(launcherConfig.reconnectBackoffMaxMs || "4000", 10) || 4000;
-  const reconnectJitterRatio = Number.parseFloat(launcherConfig.reconnectJitterRatio || "0.2") || 0.2;
-  const velocityCompatMode = Boolean(launcherConfig.velocityCompatMode);
-  const verboseMode = String(launcherConfig.verboseMode || "app").toLowerCase() === "all" ? "all" : "app";
+  const runtimeCfg = resolveBotRuntimeConfig(appConfig, version);
+  const {
+    launcherConfig,
+    discordClientId,
+    reconnectDelayMs,
+    authRecoveryWindowMs,
+    maxReconnectAttempts,
+    reconnectBackoffMaxMs,
+    reconnectJitterRatio,
+    velocityCompatMode,
+    verboseMode,
+    debugLifecycleSetting,
+    versionCandidates,
+  } = runtimeCfg;
   const verboseTrafficLogs = verboseMode === "all";
-  const versionCandidates = Array.from(
-    new Set(
-      [
-        String(version || "").trim(),
-        ...(Array.isArray(launcherConfig.preferredVersions) ? launcherConfig.preferredVersions : []),
-      ]
-        .map((entry) => String(entry).trim())
-        .filter(Boolean)
-    )
-  );
   let currentVersionIndex = 0;
-  const debugLifecycleSetting =
-    process.env.MC_BETA_DEBUG !== undefined
-      ? process.env.MC_BETA_DEBUG
-      : launcherConfig.debugLifecycle !== undefined
-        ? String(launcherConfig.debugLifecycle)
-        : "1";
   console.log(
     `🤖 Iniciando Mineflayer en modo offline/no premium con usuario ${username} en versión ${version}. Servidor: ${ip}:${port} | velocityCompatMode=${velocityCompatMode}`
   );
@@ -509,65 +506,7 @@ module.exports = function (profile) {
   }
 
   function decodeMinecraftText(input) {
-    if (input === null || input === undefined) {
-      return "";
-    }
-
-    if (typeof input === "string") {
-      const trimmed = input.trim();
-      if (!trimmed) {
-        return "";
-      }
-
-      try {
-        return decodeMinecraftText(JSON.parse(trimmed));
-      } catch {
-        return trimmed;
-      }
-    }
-
-    if (typeof input === "number" || typeof input === "boolean") {
-      return String(input);
-    }
-
-    if (Array.isArray(input)) {
-      return input.map(decodeMinecraftText).join("");
-    }
-
-    if (typeof input === "object") {
-      if (typeof input.type !== "undefined" && typeof input.value !== "undefined" && Object.keys(input).length <= 3) {
-        return decodeMinecraftText(input.value);
-      }
-
-      try {
-        return getChatDecoder().fromNotch(input).toString();
-      } catch {
-        // Fall back to manual extraction below.
-      }
-
-      if (typeof input.text !== "undefined" || typeof input.extra !== "undefined" || typeof input.translate !== "undefined") {
-        const parts = [];
-        if (typeof input.text !== "undefined") {
-          parts.push(decodeMinecraftText(input.text));
-        }
-        if (typeof input.extra !== "undefined") {
-          parts.push(decodeMinecraftText(input.extra));
-        }
-        if (typeof input.translate === "string") {
-          const args = Array.isArray(input.with) ? input.with.map(decodeMinecraftText).join(" ") : "";
-          parts.push([input.translate, args].filter(Boolean).join(" "));
-        }
-        if (parts.length > 0) {
-          return parts.join("");
-        }
-      }
-
-      if (typeof input.value !== "undefined") {
-        return decodeMinecraftText(input.value);
-      }
-    }
-
-    return String(input);
+    return decodeMinecraftTextShared(input, getChatDecoder);
   }
 
   function sanitizeVisibleText(input) {
@@ -587,71 +526,15 @@ module.exports = function (profile) {
   }
 
   function normalizeLore(rawLore) {
-    const loreLines = Array.isArray(rawLore) ? rawLore : rawLore ? [rawLore] : [];
-    return loreLines
-      .map((line) => decodeMinecraftText(line).trim())
-      .filter(Boolean);
-  }
-
-  function normalizeComponentType(type) {
-    return String(type ?? "")
-      .trim()
-      .toLowerCase()
-      .replace(/^minecraft:/, "");
+    return normalizeLoreShared(rawLore, decodeMinecraftText);
   }
 
   function readItemComponent(item, candidates) {
-    const wanted = candidates.map(normalizeComponentType);
-
-    if (item?.componentMap instanceof Map) {
-      for (const [key, component] of item.componentMap.entries()) {
-        if (wanted.includes(normalizeComponentType(key))) {
-          return component?.data ?? component?.value ?? component ?? null;
-        }
-      }
-    }
-
-    if (Array.isArray(item?.components)) {
-      for (const component of item.components) {
-        if (wanted.includes(normalizeComponentType(component?.type))) {
-          return component?.data ?? component?.value ?? component ?? null;
-        }
-      }
-    }
-
-    return null;
+    return readItemComponentShared(item, candidates);
   }
 
   function extractModernDisplayData(item) {
-    const customNameComponent = readItemComponent(item, [
-      "custom_name",
-      "minecraft:custom_name",
-      "display_name",
-      "minecraft:display_name",
-    ]);
-
-    const loreComponent = readItemComponent(item, [
-      "lore",
-      "minecraft:lore",
-      "custom_lore",
-      "minecraft:custom_lore",
-      "tooltip",
-    ]);
-
-    return {
-      customName: decodeMinecraftText(customNameComponent).trim(),
-      lore: normalizeLore(loreComponent),
-    };
-  }
-
-  function isPartialReadError(error) {
-    const message = String(error?.message || error || "");
-    const name = String(error?.name || "");
-    return (
-      name === "PartialReadError" ||
-      message.includes("PartialReadError") ||
-      message.includes("Unexpected buffer end while reading VarInt")
-    );
+    return extractModernDisplayDataShared(item, decodeMinecraftText);
   }
 
   function handleMenuReadError(error, context = "menu") {

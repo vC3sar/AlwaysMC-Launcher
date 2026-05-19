@@ -1,0 +1,135 @@
+/* Action Modal Styles */
+.action-modal {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100vw;
+    height: 100vh;
+    background: rgba(0, 0, 0, 0.65);
+    backdrop-filter: blur(12px);
+    display: none;
+    align-items: center;
+    justify-content: center;
+    z-index: 10000;
+    transition: opacity 0.2s ease;
+    opacity: 0;
+}
+
+.action-modal.visible {
+    display: flex;
+    opacity: 1;
+}
+
+.action-modal-content {
+    background: linear-gradient(180deg, rgba(30, 37, 50, 0.98), rgba(16, 20, 28, 0.98));
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 20px;
+    padding: 22px;
+    width: 90%;
+    max-width: 380px;
+    box-shadow: 
+        0 24px 60px rgba(0, 0, 0, 0.55),
+        inset 0 1px 0 rgba(255, 255, 255, 0.04);
+    transform: scale(0.9);
+    transition: transform 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.action-modal.visible .action-modal-content {
+    transform: scale(1);
+}
+
+.action-modal-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 16px;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+    padding-bottom: 10px;
+}
+
+.action-modal-title {
+    font-size: 16px;
+    font-weight: 700;
+    color: #f5d06f;
+}
+
+.action-modal-close {
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    color: #9aa7ba;
+    font-size: 14px;
+    width: 26px;
+    height: 26px;
+    border-radius: 6px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    transition: background 0.2s, color 0.2s, border-color 0.2s;
+}
+
+.action-modal-close:hover {
+    background: rgba(239, 68, 68, 0.15);
+    border-color: rgba(239, 68, 68, 0.3);
+    color: #ef4444;
+}
+
+.action-modal-body p {
+    font-size: 13.5px;
+    color: #cbd5e1;
+    margin: 0 0 20px 0;
+    line-height: 1.55;
+}
+
+.action-modal-buttons {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 12px;
+}
+
+.action-btn {
+    padding: 12px;
+    border-radius: 12px;
+    font-size: 13.5px;
+    font-weight: 700;
+    cursor: pointer;
+    transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+    border: 1px solid transparent;
+    text-align: center;
+}
+
+.action-btn.left {
+    background: rgba(59, 130, 246, 0.15);
+    border-color: rgba(59, 130, 246, 0.3);
+    color: #60a5fa;
+}
+
+.action-btn.left:hover {
+    background: rgba(59, 130, 246, 0.25);
+    border-color: rgba(59, 130, 246, 0.45);
+    transform: translateY(-1.5px);
+}
+
+.action-btn.right {
+    background: rgba(245, 208, 111, 0.15);
+    border-color: rgba(245, 208, 111, 0.3);
+    color: #f5d06f;
+}
+
+.action-btn.right:hover {
+    background: rgba(245, 208, 111, 0.25);
+    border-color: rgba(245, 208, 111, 0.45);
+    transform: translateY(-1.5px);
+}
+
+.action-btn.use {
+    background: rgba(16, 185, 129, 0.15);
+    border-color: rgba(16, 185, 129, 0.3);
+    color: #10b981;
+}
+
+.action-btn.use:hover {
+    background: rgba(16, 185, 129, 0.25);
+    border-color: rgba(16, 185, 129, 0.45);
+    transform: translateY(-1.5px);
+}
