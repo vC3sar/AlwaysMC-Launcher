@@ -12,6 +12,16 @@
     "maxReconnectAttempts": 6,
     "reconnectBackoffMaxMs": 4000,
     "reconnectJitterRatio": 0.2,
-    "menuBackgroundMode": "auto"
+    "menuBackgroundMode": "auto",
+    "catalogCache": {
+      "ttlMs": 21600000
+    },
+    "downloads": {
+      "minecraftDir": "",
+      "javaPath": "C:\\Program Files\\Eclipse Adoptium\\jdk-21.0.8.9-hotspot\\bin\\javaw.exe"
+    }
+  },
+  "auth": {
+    "microsoft": null
   }
 }

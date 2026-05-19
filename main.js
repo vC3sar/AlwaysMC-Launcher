@@ -1,6 +1,7 @@
 const { app, BrowserWindow, ipcMain, Menu } = require("electron");
 const fs = require("fs");
 const path = require("path");
+const { GameLauncherService } = require("./src/game-launcher");
 console.log("[Main] main.js cargado - proceso principal activo");
 
 const DEFAULT_SERVER = "mc.haliacraft.com";
@@ -9,6 +10,7 @@ const CONFIG_FILE = path.join(__dirname, "config.json");
 
 let botRunner = null;
 let mainWindow = null;
+let gameLauncher = null;
 
 function parseHostAndPort(hostInput, portInput) {
   const rawHost = String(hostInput ?? "").trim();
@@ -44,6 +46,33 @@ function saveJson(file, data) {
 
 function loadConfig() {
   return loadJsonSafe(CONFIG_FILE, {});
+}
+
+function mergeLauncherDefaults(raw) {
+  const cfg = raw && typeof raw === "object" ? raw : {};
+  const launcher = cfg.launcher && typeof cfg.launcher === "object" ? cfg.launcher : {};
+  cfg.launcher = {
+    preferredVersions: Array.isArray(launcher.preferredVersions) ? launcher.preferredVersions : ["1.20.1"],
+    velocityCompatMode: Boolean(launcher.velocityCompatMode),
+    debugLifecycle: Boolean(launcher.debugLifecycle),
+    verboseMode: String(launcher.verboseMode || "app").toLowerCase() === "all" ? "all" : "app",
+    reconnectDelayMs: Number.parseInt(launcher.reconnectDelayMs || "650", 10) || 650,
+    authRecoveryWindowMs: Number.parseInt(launcher.authRecoveryWindowMs || "30000", 10) || 30000,
+    maxReconnectAttempts: Number.parseInt(launcher.maxReconnectAttempts || "6", 10) || 6,
+    reconnectBackoffMaxMs: Number.parseInt(launcher.reconnectBackoffMaxMs || "4000", 10) || 4000,
+    reconnectJitterRatio: Number.parseFloat(launcher.reconnectJitterRatio || "0.2") || 0.2,
+    menuBackgroundMode: launcher.menuBackgroundMode || "auto",
+    catalogCache: {
+      ttlMs: Number.parseInt(launcher?.catalogCache?.ttlMs || "21600000", 10) || 21600000,
+    },
+    downloads: {
+      minecraftDir: String(launcher?.downloads?.minecraftDir || "").trim(),
+      javaPath: String(launcher?.downloads?.javaPath || "").trim(),
+    },
+  };
+  if (!cfg.auth || typeof cfg.auth !== "object") cfg.auth = {};
+  if (!cfg.auth.microsoft || typeof cfg.auth.microsoft !== "object") cfg.auth.microsoft = null;
+  return cfg;
 }
 
 function normalizeProfile(profile) {
@@ -214,7 +243,7 @@ ipcMain.handle("launcher:startNew", async (_, profileInput) => {
 ipcMain.handle("launcher:getConfig", () => loadConfig());
 ipcMain.handle("launcher:saveConfig", (_, config) => {
   try {
-    saveJson(CONFIG_FILE, config && typeof config === "object" ? config : {});
+    saveJson(CONFIG_FILE, mergeLauncherDefaults(config));
     return { ok: true };
   } catch {
     return { ok: false, error: "No se pudo guardar config.json" };
@@ -245,7 +274,7 @@ ipcMain.handle("app:quit", () => {
 });
 ipcMain.handle("app:returnToLauncher", () => {
   console.log("[Main] app:returnToLauncher solicitado");
-  return stopBotSession()
+  return Promise.all([stopBotSession(), gameLauncher ? Promise.resolve(gameLauncher.stopGame()) : Promise.resolve({ ok: true })])
     .then(() => {
       if (mainWindow && !mainWindow.isDestroyed()) {
         return mainWindow.loadFile(path.join(__dirname, "launcher.html")).then(() => ({ ok: true }));
@@ -259,8 +288,91 @@ ipcMain.handle("app:returnToLauncher", () => {
     .catch((error) => ({ ok: false, error: error && error.message ? error.message : String(error) }));
 });
 
+ipcMain.handle("launcher:getVersionCatalog", async () => {
+  if (!gameLauncher) return { ok: false, error: "Servicio de launcher no inicializado." };
+  return gameLauncher.getVersionCatalog({ forceRefresh: false });
+});
+ipcMain.handle("launcher:refreshVersionCatalog", async () => {
+  if (!gameLauncher) return { ok: false, error: "Servicio de launcher no inicializado." };
+  return gameLauncher.getVersionCatalog({ forceRefresh: true });
+});
+ipcMain.handle("launcher:installVersion", async (_, payload) => {
+  if (!gameLauncher) return { ok: false, error: "Servicio de launcher no inicializado." };
+  return gameLauncher.installVersion(payload || {});
+});
+ipcMain.handle("launcher:getInstallStatus", async (_, installId) => {
+  if (!gameLauncher) return { ok: false, error: "Servicio de launcher no inicializado." };
+  return gameLauncher.getInstallStatus(String(installId || ""));
+});
+ipcMain.handle("launcher:cancelInstall", async (_, installId) => {
+  if (!gameLauncher) return { ok: false, error: "Servicio de launcher no inicializado." };
+  return gameLauncher.cancelInstall(String(installId || ""));
+});
+ipcMain.handle("launcher:launchGame", async (_, payload) => {
+  if (!gameLauncher) return { ok: false, error: "Servicio de launcher no inicializado." };
+  return gameLauncher.launchGame(payload || {});
+});
+ipcMain.handle("launcher:isVersionInstalled", async (_, payload) => {
+  if (!gameLauncher) return { ok: false, error: "Servicio de launcher no inicializado." };
+  return gameLauncher.isVersionInstalled(payload || {});
+});
+ipcMain.handle("launcher:getGameRuntimeStatus", async () => {
+  if (!gameLauncher) return { ok: false, error: "Servicio de launcher no inicializado." };
+  return gameLauncher.getGameRuntimeStatus();
+});
+ipcMain.handle("launcher:stopGame", async () => {
+  if (!gameLauncher) return { ok: false, error: "Servicio de launcher no inicializado." };
+  return gameLauncher.stopGame();
+});
+ipcMain.handle("launcher:getJavaRuntimes", async () => {
+  if (!gameLauncher) return { ok: false, error: "Servicio de launcher no inicializado." };
+  const runtimes = await gameLauncher.detectJavaRuntimes();
+  return { ok: true, runtimes };
+});
+ipcMain.handle("launcher:setJavaPath", async (_, javaPath) => {
+  try {
+    const cfg = mergeLauncherDefaults(loadConfig());
+    cfg.launcher.downloads.javaPath = String(javaPath || "").trim();
+    saveJson(CONFIG_FILE, cfg);
+    return { ok: true };
+  } catch (error) {
+    return { ok: false, error: error && error.message ? error.message : String(error) };
+  }
+});
+ipcMain.handle("modloader:getForgeCatalog", async () => {
+  if (!gameLauncher) return { ok: false, error: "Servicio de launcher no inicializado." };
+  const result = await gameLauncher.getVersionCatalog({ forceRefresh: false });
+  return result.ok ? { ok: true, forge: result.catalog.forge || [] } : result;
+});
+ipcMain.handle("modloader:getFabricCatalog", async () => {
+  if (!gameLauncher) return { ok: false, error: "Servicio de launcher no inicializado." };
+  const result = await gameLauncher.getVersionCatalog({ forceRefresh: false });
+  return result.ok ? { ok: true, fabric: result.catalog.fabric || [] } : result;
+});
+ipcMain.handle("auth:msLogin", async () => {
+  if (!gameLauncher) return { ok: false, error: "Servicio de launcher no inicializado." };
+  return gameLauncher.msLogin();
+});
+ipcMain.handle("auth:msLogout", async () => {
+  if (!gameLauncher) return { ok: false, error: "Servicio de launcher no inicializado." };
+  return gameLauncher.msLogout();
+});
+ipcMain.handle("auth:getSession", async () => {
+  if (!gameLauncher) return { ok: false, error: "Servicio de launcher no inicializado." };
+  return gameLauncher.getAuthSession();
+});
+
 app.whenReady().then(() => {
   console.log("[Main] app.whenReady()");
+  const initialCfg = mergeLauncherDefaults(loadConfig());
+  saveJson(CONFIG_FILE, initialCfg);
+  gameLauncher = new GameLauncherService({
+    appRoot: __dirname,
+    loadConfig: () => mergeLauncherDefaults(loadConfig()),
+    saveConfig: (cfg) => saveJson(CONFIG_FILE, mergeLauncherDefaults(cfg)),
+    stopBotSession,
+    onInstallUpdate: () => {},
+  });
   createWindow();
 
   app.on("activate", () => {

@@ -35,17 +35,66 @@
       </div>
 
       <div id="launcher-play-view" class="launcher-view">
-        <div class="launcher-section-title">Jugar (Multijugador)</div>
-        <div class="launcher-row">
-          <button type="button" id="continue-last-btn" class="launcher-btn alt">Continuar con la ultima</button>
-          <button type="button" id="create-new-btn" class="launcher-btn alt">Crear nueva</button>
+        <div class="launcher-section-title">Jugar (Multijugador / Juego Java)</div>
+        <div class="launcher-play-tabs" role="tablist" aria-label="Modo de juego">
+          <button type="button" id="play-tab-bot" class="launcher-play-tab active" role="tab" aria-selected="true" aria-controls="play-tab-panel-bot"><i data-lucide="bot"></i><span>Bot rápido</span></button>
+          <button type="button" id="play-tab-java" class="launcher-play-tab" role="tab" aria-selected="false" aria-controls="play-tab-panel-java"><i data-lucide="gamepad-2"></i><span>Juego Java</span></button>
         </div>
-        <div id="new-profile-form" class="launcher-form hidden">
-          <input id="new-username" type="text" placeholder="Nickname offline/no premium">
-          <input id="new-ip" type="text" placeholder="IP (ej: mc.haliacraft.com)">
-          <input id="new-port" type="number" placeholder="Puerto (25565)">
-          <input id="new-version" type="text" placeholder="Version (ej: 1.21.11)">
-          <button type="button" id="start-new-profile-btn" class="launcher-btn">Iniciar nueva partida</button>
+        <div id="play-tab-panel-bot" class="launcher-play-panel active" role="tabpanel">
+          <div class="launcher-helper-text">Conexión rápida al panel Mineflayer.</div>
+          <div class="launcher-row">
+            <button type="button" id="continue-last-btn" class="launcher-btn alt"><i data-lucide="history"></i><span>Continuar con la ultima</span></button>
+            <button type="button" id="create-new-btn" class="launcher-btn alt"><i data-lucide="plus-circle"></i><span>Crear nueva</span></button>
+          </div>
+          <div id="new-profile-form" class="launcher-form hidden">
+            <input id="new-username" type="text" placeholder="Nickname offline/no premium">
+            <input id="new-ip" type="text" placeholder="IP (ej: mc.haliacraft.com)">
+            <input id="new-port" type="number" placeholder="Puerto (25565)">
+            <input id="new-version" type="text" placeholder="Version (ej: 1.21.11)">
+            <button type="button" id="start-new-profile-btn" class="launcher-btn"><i data-lucide="rocket"></i><span>Iniciar nueva partida</span></button>
+          </div>
+        </div>
+        <div id="play-tab-panel-java" class="launcher-play-panel" role="tabpanel" hidden>
+          <div class="launcher-helper-text">Selecciona modo y versión, luego pulsa Lanzar.</div>
+          <div class="launcher-form">
+          <label for="game-auth-mode"><i data-lucide="key-round"></i><span>Modo de autenticación</span></label>
+          <select id="game-auth-mode">
+            <option value="offline">Offline</option>
+            <option value="microsoft">Microsoft (pendiente)</option>
+          </select>
+
+          <label for="game-distribution"><i data-lucide="layers"></i><span>Distribución</span></label>
+          <select id="game-distribution">
+            <option value="vanilla">Vanilla</option>
+            <option value="fabric">Fabric</option>
+            <option value="forge">Forge</option>
+          </select>
+
+          <label for="game-version-select"><i data-lucide="list-tree"></i><span>Versión disponible</span></label>
+          <div id="game-version-type-filters" class="launcher-version-filters">
+            <label class="launcher-check"><input id="filter-release" type="checkbox" checked><span>Release</span></label>
+            <label class="launcher-check"><input id="filter-snapshot" type="checkbox"><span>Snapshot</span></label>
+            <label class="launcher-check"><input id="filter-old-beta" type="checkbox"><span>Old Beta</span></label>
+            <label class="launcher-check"><input id="filter-old-alpha" type="checkbox"><span>Old Alpha</span></label>
+          </div>
+          <select id="game-version-select"></select>
+
+          <label for="game-username"><i data-lucide="user-round"></i><span>Nickname (offline)</span></label>
+          <input id="game-username" type="text" placeholder="JugadorOffline">
+
+          <label for="game-java-path"><i data-lucide="coffee"></i><span>Java path (opcional)</span></label>
+          <input id="game-java-path" type="text" placeholder="C:\\Program Files\\Java\\...\\bin\\javaw.exe">
+
+          <div class="launcher-row launcher-row-actions">
+            <button type="button" id="game-refresh-catalog-btn" class="launcher-btn alt"><i data-lucide="refresh-cw"></i><span>Actualizar catálogo</span></button>
+            <button type="button" id="game-scan-java-btn" class="launcher-link"><i data-lucide="search-check"></i><span>Detectar Java</span></button>
+          </div>
+          <div class="launcher-row launcher-row-actions">
+            <button type="button" id="game-launch-btn" class="launcher-btn"><i data-lucide="play"></i><span>Lanzar juego</span></button>
+            <button type="button" id="game-stop-btn" class="launcher-link"><i data-lucide="square"></i><span>Cerrar juego</span></button>
+          </div>
+          <div id="game-install-status" class="launcher-status" data-kind="ok"></div>
+          </div>
         </div>
         <button type="button" id="play-back-btn" class="launcher-link">Volver</button>
       </div>

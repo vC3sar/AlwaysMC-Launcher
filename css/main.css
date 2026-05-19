@@ -128,6 +128,7 @@ body::-webkit-scrollbar-corner,
 
 .launcher-shell {
     width: min(500px, 88vw);
+    max-height: 92vh;
     border: 1px solid rgba(192, 63, 63, 0.35);
     border-radius: 14px;
     padding: 16px;
@@ -135,10 +136,13 @@ body::-webkit-scrollbar-corner,
     box-shadow: 0 30px 80px rgba(0, 0, 0, 0.62);
     position: relative;
     z-index: 1;
+    overflow-y: auto;
+    overflow-x: hidden;
+    box-sizing: border-box;
 }
 
 .launcher-shell.main-compact {
-    width: min(430px, 88vw);
+    width: min(400px, 88vw);
 }
 
 .launcher-brand {
@@ -160,6 +164,10 @@ body::-webkit-scrollbar-corner,
     display: flex;
     flex-direction: column;
     gap: 12px;
+    align-items: flex-start;
+}
+
+#launcher-main-menu {
     align-items: flex-start;
 }
 
@@ -264,6 +272,85 @@ body::-webkit-scrollbar-corner,
     gap: 10px;
 }
 
+.launcher-play-tabs {
+    width: 100%;
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 10px;
+    margin-bottom: 10px;
+}
+
+.launcher-play-tab {
+    border: 1px solid rgba(200, 146, 106, 0.35);
+    background: rgba(58, 36, 36, 0.22);
+    color: #f6e8d6;
+    border-radius: 10px;
+    padding: 10px 12px;
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    font-weight: 600;
+}
+
+.launcher-play-tab.active {
+    border-color: rgba(245, 208, 111, 0.82);
+    background: rgba(170, 76, 60, 0.36);
+    box-shadow: 0 0 0 2px rgba(245, 208, 111, 0.22);
+}
+
+.launcher-play-tab i {
+    width: 14px;
+    height: 14px;
+}
+
+.launcher-play-panel {
+    width: 100%;
+}
+
+.launcher-play-panel[hidden] {
+    display: none !important;
+}
+
+#launcher-play-view .launcher-row-actions {
+    width: 100%;
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 10px;
+}
+
+#launcher-play-view .launcher-row-single {
+    width: 100%;
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 10px;
+}
+
+#game-refresh-catalog-btn,
+#game-launch-btn,
+#game-stop-btn,
+#game-scan-java-btn {
+    width: 100%;
+    max-width: none;
+    text-align: center;
+}
+
+#launcher-play-view .launcher-btn,
+#launcher-play-view .launcher-link {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+}
+
+#launcher-play-view .launcher-btn i,
+#launcher-play-view .launcher-link i {
+    width: 15px;
+    height: 15px;
+    flex-shrink: 0;
+}
+
 #launcher-config-view .launcher-row:last-child {
     width: 100%;
     display: grid;
@@ -336,6 +423,8 @@ body::-webkit-scrollbar-corner,
     display: flex;
     flex-direction: column;
     gap: 8px;
+    width: 100%;
+    max-width: 100%;
 }
 
 .launcher-form.hidden {
@@ -349,12 +438,56 @@ body::-webkit-scrollbar-corner,
     color: #e7ddd0;
     border-radius: 8px;
     padding: 10px;
+    width: 100%;
+    max-width: 100%;
+    min-width: 0;
+    box-sizing: border-box;
+}
+
+#launcher-play-view #game-auth-mode,
+#launcher-play-view #game-distribution,
+#launcher-play-view #game-version-select {
+    width: 100%;
+    max-width: 100%;
+    min-width: 0;
 }
 
 .launcher-form label {
     color: #d5b896;
     font-size: 12px;
     margin-top: 2px;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.launcher-form label i {
+    width: 13px;
+    height: 13px;
+    opacity: 0.9;
+}
+
+.launcher-helper-text {
+    font-size: 12px;
+    color: #be9d7c;
+    margin-top: -2px;
+    margin-bottom: 6px;
+}
+
+.launcher-version-filters {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 6px 10px;
+    margin-top: 2px;
+    margin-bottom: 2px;
+    padding: 8px 10px;
+    border-radius: 8px;
+    border: 1px solid rgba(177, 133, 102, 0.25);
+    background: rgba(0, 0, 0, 0.22);
+}
+
+.launcher-version-filters .launcher-check {
+    margin: 0;
 }
 
 .launcher-check {
@@ -559,6 +692,52 @@ body::-webkit-scrollbar-corner,
 #reconnect-panel .reconnect-subtitle {
     font-size: 12px;
     color: #fca5a5;
+}
+
+#reconnect-panel .reconnect-progress {
+    position: relative;
+    width: min(340px, 100%);
+    height: 6px;
+    margin-top: 6px;
+    border-radius: 999px;
+    overflow: hidden;
+    background: rgba(255, 255, 255, 0.12);
+    border: 1px solid rgba(248, 113, 113, 0.25);
+    display: none;
+}
+
+#reconnect-panel .reconnect-progress-bar {
+    position: absolute;
+    top: 0;
+    left: -42%;
+    width: 42%;
+    height: 100%;
+    border-radius: 999px;
+    background: linear-gradient(90deg, rgba(248, 113, 113, 0.25), rgba(251, 191, 36, 0.95), rgba(248, 113, 113, 0.25));
+    animation: reconnect-progress-slide 1.05s ease-in-out infinite;
+}
+
+#reconnect-panel .reconnect-attempt {
+    margin-top: 4px;
+    font-size: 11px;
+    color: #fecaca;
+    opacity: 0.9;
+    display: none;
+}
+
+#reconnect-panel[data-reconnect-state="trying"] .reconnect-progress,
+#reconnect-panel[data-reconnect-state="trying"] .reconnect-attempt {
+    display: block;
+}
+
+@keyframes reconnect-progress-slide {
+    0% {
+        left: -42%;
+    }
+
+    100% {
+        left: 100%;
+    }
 }
 
 #reconnect-button {

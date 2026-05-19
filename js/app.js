@@ -18,6 +18,8 @@ const chat = document.getElementById("chat");
 const input = document.getElementById("input");
 const reconnectPanel = document.getElementById("reconnect-panel");
 const reconnectButton = document.getElementById("reconnect-button");
+const reconnectSubtitle = reconnectPanel ? reconnectPanel.querySelector(".reconnect-subtitle") : null;
+const reconnectAttempt = reconnectPanel ? reconnectPanel.querySelector(".reconnect-attempt") : null;
 const menuPanel = document.getElementById("menu-panel");
 const menuTitle = document.getElementById("menu-title");
 const menuMeta = document.getElementById("menu-meta");
@@ -33,6 +35,7 @@ const inventoryButton = document.getElementById("inventory-button");
 const endSessionButton = document.getElementById("end-session-button");
 const hudHealth = document.getElementById("hud-health");
 const hudFood = document.getElementById("hud-food");
+let socketReconnectAttempt = 0;
 
 if (window.lucide && typeof window.lucide.createIcons === "function") {
   window.lucide.createIcons({ icons: window.lucide.icons, attrs: { width: 16, height: 16, "stroke-width": 2.2 } });
@@ -111,13 +114,29 @@ function renderLine(text, kind = "normal", persist = true) {
 
 function appendLine(text, kind = "normal") { renderLine(text, kind, true); }
 
+function updateReconnectPanel({ visible, busy = false, buttonDisabled = false, buttonText = "Reconectar", subtitle = "", attemptText = "" }) {
+  reconnectPanel.classList.toggle("visible", Boolean(visible));
+  reconnectPanel.dataset.reconnectState = busy ? "trying" : "idle";
+  reconnectButton.disabled = Boolean(buttonDisabled);
+  reconnectButton.textContent = buttonText;
+  if (reconnectSubtitle) reconnectSubtitle.textContent = subtitle || "Puedes reiniciar la conexión sin recargar la página.";
+  if (reconnectAttempt) reconnectAttempt.textContent = attemptText || "";
+}
+
 function setBotStatus(status) {
   const normalized = String(status || "offline").toLowerCase();
   sidebarKicker.dataset.status = normalized === "online" ? "online" : normalized === "connecting" ? "connecting" : "offline";
   if (normalized === "online") {
-    reconnectPanel.classList.remove("visible"); reconnectButton.disabled = false; reconnectButton.textContent = "Reconectar";
+    updateReconnectPanel({ visible: false, busy: false, buttonDisabled: false, buttonText: "Reconectar" });
   } else {
-    reconnectPanel.classList.add("visible"); reconnectButton.disabled = normalized === "connecting"; reconnectButton.textContent = normalized === "connecting" ? "Reiniciando..." : "Reconectar";
+    updateReconnectPanel({
+      visible: true,
+      busy: normalized === "connecting",
+      buttonDisabled: normalized === "connecting",
+      buttonText: normalized === "connecting" ? "Reiniciando..." : "Reconectar",
+      subtitle: normalized === "connecting" ? "Reconectando el bot..." : "Puedes reiniciar la conexión sin recargar la página.",
+      attemptText: normalized === "connecting" ? "Intentando conexión..." : "Esperando acción…",
+    });
   }
 }
 
@@ -259,10 +278,9 @@ function connectSocket() {
   ws = new WebSocket("ws://127.0.0.1:3000");
 
   ws.onopen = () => {
+    socketReconnectAttempt = 0;
     if (!manualSocketClose) {
-      reconnectPanel.classList.remove("visible");
-      reconnectButton.disabled = false;
-      reconnectButton.textContent = "Reconectar";
+      updateReconnectPanel({ visible: false, busy: false, buttonDisabled: false, buttonText: "Reconectar" });
     }
   };
 
@@ -302,21 +320,28 @@ function connectSocket() {
       menuBusy.textContent = data.message || "Cambiando de servidor...";
     } else if (data.type === "reconnectState") {
       const reconnecting = Boolean(data.busy);
-      reconnectPanel.classList.toggle("visible", reconnecting || sidebarKicker.dataset.status === "offline");
-      reconnectButton.disabled = reconnecting;
-      reconnectButton.textContent = reconnecting ? "Reiniciando..." : "Reconectar";
-      const subtitle = reconnectPanel.querySelector(".reconnect-subtitle");
-      if (subtitle) subtitle.textContent = data.message || "Puedes reiniciar la conexión sin recargar la página.";
+      updateReconnectPanel({
+        visible: reconnecting || sidebarKicker.dataset.status === "offline",
+        busy: reconnecting,
+        buttonDisabled: reconnecting,
+        buttonText: reconnecting ? "Reiniciando..." : "Reconectar",
+        subtitle: data.message || "Puedes reiniciar la conexión sin recargar la página.",
+        attemptText: reconnecting ? "Intentando conexión..." : "Esperando acción…",
+      });
     }
   };
 
   ws.onclose = () => {
     if (!manualSocketClose) {
-      reconnectPanel.classList.add("visible");
-      reconnectButton.disabled = false;
-      reconnectButton.textContent = "Reconectar";
-      const subtitle = reconnectPanel.querySelector(".reconnect-subtitle");
-      if (subtitle) subtitle.textContent = "La conexión con el panel se cerró. Reintentando...";
+      socketReconnectAttempt += 1;
+      updateReconnectPanel({
+        visible: true,
+        busy: true,
+        buttonDisabled: false,
+        buttonText: "Reconectar",
+        subtitle: "La conexión con el panel se cerró. Reintentando...",
+        attemptText: `Reconectando panel (intento ${socketReconnectAttempt})`,
+      });
       reconnectSocketTimer = setTimeout(connectSocket, 1200);
     }
   };
@@ -354,8 +379,14 @@ actionModal.addEventListener("click", (e) => { if (e.target === actionModal) hid
 menuSearch.addEventListener("input", () => { menuQuery = menuSearch.value || ""; applyMenuFilter(); });
 reconnectButton.addEventListener("click", () => {
   if (reconnectButton.disabled) return;
-  reconnectButton.disabled = true;
-  reconnectButton.textContent = "Solicitando...";
+  updateReconnectPanel({
+    visible: true,
+    busy: true,
+    buttonDisabled: true,
+    buttonText: "Solicitando...",
+    subtitle: "Solicitando reinicio de conexión al bot...",
+    attemptText: "Enviando solicitud...",
+  });
   sendSocketMessage({ type: "reconnectRequest" });
 });
 menuCloseBtn.addEventListener("click", clearMenu);

@@ -269,6 +269,9 @@ module.exports = function (profile) {
       clearTimeout(reconnectTimer);
       reconnectTimer = null;
     }
+  }
+
+  function clearStableSessionTimer() {
     if (stableSessionTimer) {
       clearTimeout(stableSessionTimer);
       stableSessionTimer = null;
@@ -413,6 +416,9 @@ module.exports = function (profile) {
       }
     }
 
+    // Start of a new connection cycle: allow this instance to schedule retries
+    // if it fails before spawn/login.
+    reconnectInProgress = false;
     botReady = false;
     botStatus = "connecting";
     broadcastSidebarState("connecting");
@@ -1194,6 +1200,7 @@ module.exports = function (profile) {
     // MAIN EVENTS
     currentBot.on("login", () => {
       debugLog("bot:login", `username=${currentBot.username}`);
+      reconnectInProgress = false;
     });
 
     currentBot.on("spawn", () => {
@@ -1202,6 +1209,7 @@ module.exports = function (profile) {
       reconnectInProgress = false;
       spawnAt = Date.now();
       clearReconnectTimer();
+      clearStableSessionTimer();
       menuTransitionLocked = false;
       setMenuTransitionLocked(false);
       updateDiscordPresence({ serverIp: ip, version: getActiveVersion(), username: currentBot.username || username });
@@ -1281,7 +1289,7 @@ module.exports = function (profile) {
       pendingOutboundMessages.length = 0;
       currentHealth = null;
       currentFood = null;
-      clearReconnectTimer();
+      clearStableSessionTimer();
       if (handleDisconnectEvent("kicked", { reasonText: decodedReason, loggedIn })) {
         return;
       }
@@ -1304,7 +1312,7 @@ module.exports = function (profile) {
       pendingOutboundMessages.length = 0;
       currentHealth = null;
       currentFood = null;
-      clearReconnectTimer();
+      clearStableSessionTimer();
       if (handleDisconnectEvent("disconnect", { reasonText: String(reason || "unknown") })) {
         return;
       }
@@ -1328,7 +1336,7 @@ module.exports = function (profile) {
       pendingOutboundMessages.length = 0;
       currentHealth = null;
       currentFood = null;
-      clearReconnectTimer();
+      clearStableSessionTimer();
       if (handleDisconnectEvent("end", { reasonText: "connection ended" })) {
         return;
       }
@@ -1379,6 +1387,7 @@ module.exports = function (profile) {
     reconnectInProgress = false;
     menuTransitionLocked = false;
     clearReconnectTimer();
+    clearStableSessionTimer();
     cancelMenuRefresh();
     if (menuTransitionTimer) {
       clearTimeout(menuTransitionTimer);

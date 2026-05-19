@@ -10,6 +10,25 @@ const launcherPlayView = document.getElementById("launcher-play-view");
 const launcherConfigView = document.getElementById("launcher-config-view");
 const launcherInfoView = document.getElementById("launcher-info-view");
 const launcherControlsHint = document.getElementById("launcher-controls-hint");
+const gameAuthModeSelect = document.getElementById("game-auth-mode");
+const gameDistributionSelect = document.getElementById("game-distribution");
+const gameVersionSelect = document.getElementById("game-version-select");
+const gameUsernameInput = document.getElementById("game-username");
+const gameJavaPathInput = document.getElementById("game-java-path");
+const gameRefreshCatalogBtn = document.getElementById("game-refresh-catalog-btn");
+const gameLaunchBtn = document.getElementById("game-launch-btn");
+const gameStopBtn = document.getElementById("game-stop-btn");
+const gameScanJavaBtn = document.getElementById("game-scan-java-btn");
+const gameInstallStatus = document.getElementById("game-install-status");
+const playTabBotBtn = document.getElementById("play-tab-bot");
+const playTabJavaBtn = document.getElementById("play-tab-java");
+const playTabBotPanel = document.getElementById("play-tab-panel-bot");
+const playTabJavaPanel = document.getElementById("play-tab-panel-java");
+const filterRelease = document.getElementById("filter-release");
+const filterSnapshot = document.getElementById("filter-snapshot");
+const filterOldBeta = document.getElementById("filter-old-beta");
+const filterOldAlpha = document.getElementById("filter-old-alpha");
+const gameVersionTypeFilters = document.getElementById("game-version-type-filters");
 
 let gameStarted = false;
 let menuAudioMuted = false;
@@ -18,10 +37,21 @@ let menuAudioUnlockBound = false;
 let currentBgVideoMode = "auto";
 let currentBgVideoSrc = "";
 let currentLauncherView = "main";
+let launcherViewHistory = ["main"];
 let activeMainMenuIndex = 0;
 let activeConfigIndex = 0;
 let activePlayIndex = 0;
 let activeInfoIndex = 0;
+let gameCatalog = { vanilla: [], forge: [], fabric: [] };
+let activeInstallId = "";
+let installPollTimer = null;
+let activePlayTab = "bot";
+const versionTypeFilters = {
+  release: true,
+  snapshot: false,
+  old_beta: false,
+  old_alpha: false,
+};
 const MENU_AUDIO_MUTED_STORAGE_KEY = "launcher.menuAudioMuted";
 const MAIN_MENU_BUTTON_IDS = ["menu-play-btn", "menu-config-btn", "menu-info-btn", "menu-fullscreen-btn", "menu-exit-btn"];
 
@@ -122,6 +152,168 @@ function setLauncherStatus(text, isError = false) {
   launcherStatus.dataset.kind = isError ? "error" : "ok";
 }
 
+function setGameStatus(text, isError = false) {
+  if (!gameInstallStatus) return;
+  gameInstallStatus.textContent = text || "";
+  gameInstallStatus.dataset.kind = isError ? "error" : "ok";
+}
+
+function getDistributionEntries() {
+  const dist = String(gameDistributionSelect?.value || "vanilla");
+  if (dist === "fabric") return gameCatalog.fabric || [];
+  if (dist === "forge") return gameCatalog.forge || [];
+  return gameCatalog.vanilla || [];
+}
+
+function getEntryVersionId(entry) {
+  if (!entry || typeof entry !== "object") return "";
+  if (entry.source === "fabric") return String(entry.gameVersion || "");
+  if (entry.source === "forge") return String(entry.gameVersion || "");
+  return String(entry.id || "");
+}
+
+function refreshVersionSelect() {
+  if (!gameVersionSelect) return;
+  const entries = applyVersionFilters(getDistributionEntries(), String(gameDistributionSelect?.value || "vanilla"), versionTypeFilters);
+  const current = gameVersionSelect.value;
+  gameVersionSelect.innerHTML = "";
+  entries.forEach((entry) => {
+    const option = document.createElement("option");
+    const versionId = getEntryVersionId(entry);
+    option.value = versionId;
+    if (entry.source === "fabric") option.textContent = `${entry.gameVersion} | loader ${entry.loaderVersion}`;
+    else if (entry.source === "forge") option.textContent = `${entry.gameVersion} | forge ${entry.forgeVersion} (${entry.channel})`;
+    else option.textContent = `${entry.id} (${entry.type})`;
+    option.dataset.source = entry.source || String(gameDistributionSelect.value || "vanilla");
+    option.dataset.loaderVersion = entry.loaderVersion || "";
+    option.dataset.type = entry.type || "";
+    gameVersionSelect.appendChild(option);
+  });
+  if (current) gameVersionSelect.value = current;
+  if (!gameVersionSelect.value && gameVersionSelect.options.length > 0) gameVersionSelect.selectedIndex = 0;
+  if (gameVersionSelect.options.length === 0) {
+    setGameStatus("Sin resultados para los filtros seleccionados.", true);
+  }
+}
+
+function applyVersionFilters(entries, distribution, filters) {
+  if (!Array.isArray(entries)) return [];
+  const dist = String(distribution || "vanilla");
+  if (dist !== "vanilla") return entries;
+  return entries.filter((entry) => Boolean(filters[String(entry.type || "release")]));  
+}
+
+function syncVersionTypeFiltersUI() {
+  if (filterRelease) filterRelease.checked = Boolean(versionTypeFilters.release);
+  if (filterSnapshot) filterSnapshot.checked = Boolean(versionTypeFilters.snapshot);
+  if (filterOldBeta) filterOldBeta.checked = Boolean(versionTypeFilters.old_beta);
+  if (filterOldAlpha) filterOldAlpha.checked = Boolean(versionTypeFilters.old_alpha);
+}
+
+function updateFilterVisibilityByDistribution() {
+  const dist = String(gameDistributionSelect?.value || "vanilla");
+  const vanilla = dist === "vanilla";
+  if (gameVersionTypeFilters) gameVersionTypeFilters.style.display = vanilla ? "grid" : "none";
+  if (!vanilla) {
+    setGameStatus("Filtros de tipo aplican solo a Vanilla.", false);
+  }
+}
+
+function switchPlayTab(tab) {
+  const normalized = tab === "java" ? "java" : "bot";
+  activePlayTab = normalized;
+  if (playTabBotBtn) {
+    const active = normalized === "bot";
+    playTabBotBtn.classList.toggle("active", active);
+    playTabBotBtn.setAttribute("aria-selected", active ? "true" : "false");
+  }
+  if (playTabJavaBtn) {
+    const active = normalized === "java";
+    playTabJavaBtn.classList.toggle("active", active);
+    playTabJavaBtn.setAttribute("aria-selected", active ? "true" : "false");
+  }
+  if (playTabBotPanel) playTabBotPanel.hidden = normalized !== "bot";
+  if (playTabJavaPanel) playTabJavaPanel.hidden = normalized !== "java";
+}
+
+async function waitInstallCompletion(installId) {
+  if (!launcherAPI || !installId) return { ok: false, error: "Instalación inválida." };
+  while (true) {
+    const statusRes = await launcherAPI.getInstallStatus(installId);
+    if (!statusRes?.ok) return { ok: false, error: statusRes?.error || "No se pudo consultar instalación." };
+    const st = statusRes.status || {};
+    const pct = Number.isFinite(st.progress) ? `${Math.max(0, Math.min(100, Math.round(st.progress)))}%` : "";
+    const msg = st.message || "Procesando...";
+    setGameStatus(`[${st.phase || "working"}] ${pct} ${msg}`.trim(), st.phase === "error");
+    if (!st.busy) {
+      if (st.phase === "done") return { ok: true };
+      return { ok: false, error: st.error || st.message || "La instalación no finalizó correctamente." };
+    }
+    // eslint-disable-next-line no-await-in-loop
+    await new Promise((resolve) => setTimeout(resolve, 1000));
+  }
+}
+
+async function ensureInstalledThenLaunch({ source, versionId, loaderVersion, authMode, username, javaPath }) {
+  if (!launcherAPI) return { ok: false, error: "API no disponible." };
+  if (source === "forge") return { ok: false, error: "Forge automático aún no está soportado en esta build." };
+
+  let check = await launcherAPI.isVersionInstalled({ source, versionId, loaderVersion });
+  if (!check?.ok) return { ok: false, error: check?.error || "No se pudo validar instalación." };
+
+  if (!check.installed) {
+    setGameStatus(`Instalando ${source}:${versionId} antes de lanzar...`);
+    const installRes = await launcherAPI.installVersion({ source, versionId, loaderVersion, authMode });
+    if (!installRes?.ok) return { ok: false, error: installRes?.error || "No se pudo iniciar instalación." };
+    activeInstallId = installRes.installId || "";
+    const waitRes = await waitInstallCompletion(activeInstallId);
+    if (!waitRes.ok) return waitRes;
+    check = await launcherAPI.isVersionInstalled({ source, versionId, loaderVersion });
+    if (!check?.ok || !check?.installed) return { ok: false, error: check?.error || "Instalación no detectada tras completar." };
+  }
+
+  const launchVersionId = source === "fabric" && check?.profileId ? check.profileId : versionId;
+  setGameStatus(`Lanzando ${launchVersionId}...`);
+  const launchRes = await launcherAPI.launchGame({ versionId: launchVersionId, authMode, username, javaPath });
+  if (!launchRes?.ok) return { ok: false, error: launchRes?.error || "No se pudo lanzar el juego." };
+  return { ok: true, pid: launchRes.pid };
+}
+
+async function loadGameCatalog(forceRefresh = false) {
+  if (!launcherAPI) return;
+  setGameStatus(forceRefresh ? "Actualizando catálogo..." : "Cargando catálogo...");
+  const result = forceRefresh ? await launcherAPI.refreshVersionCatalog() : await launcherAPI.getVersionCatalog();
+  if (!result?.ok) {
+    setGameStatus(result?.error || "No se pudo cargar el catálogo.", true);
+    return;
+  }
+  gameCatalog = result.catalog || { vanilla: [], forge: [], fabric: [] };
+  refreshVersionSelect();
+  const warning = result.warning ? ` (warning: ${result.warning})` : "";
+  setGameStatus(`Catálogo listo: ${gameCatalog.vanilla.length} vanilla, ${gameCatalog.fabric.length} fabric, ${gameCatalog.forge.length} forge${warning}`);
+}
+
+function stopInstallPolling() {
+  if (installPollTimer) {
+    clearInterval(installPollTimer);
+    installPollTimer = null;
+  }
+}
+
+function startInstallPolling() {
+  stopInstallPolling();
+  if (!activeInstallId || !launcherAPI) return;
+  installPollTimer = setInterval(async () => {
+    const statusRes = await launcherAPI.getInstallStatus(activeInstallId);
+    if (!statusRes?.ok) return;
+    const st = statusRes.status || {};
+    const pct = Number.isFinite(st.progress) ? `${Math.max(0, Math.min(100, Math.round(st.progress)))}%` : "";
+    const msg = st.message || "Procesando...";
+    setGameStatus(`[${st.phase || "working"}] ${pct} ${msg}`.trim(), st.phase === "error");
+    if (!st.busy) stopInstallPolling();
+  }, 1000);
+}
+
 function getMainMenuButtons() {
   return MAIN_MENU_BUTTON_IDS.map((id) => document.getElementById(id)).filter(Boolean);
 }
@@ -199,7 +391,16 @@ function setInfoSelection(index) {
   target.scrollIntoView({ block: "nearest", inline: "nearest", behavior: "smooth" });
 }
 
-function showLauncherView(view) {
+function showLauncherView(view, options = {}) {
+  const fromHistory = Boolean(options.fromHistory);
+  const previousView = currentLauncherView;
+  if (!fromHistory) {
+    if (view === "main") {
+      launcherViewHistory = ["main"];
+    } else if (previousView !== view) {
+      launcherViewHistory.push(view);
+    }
+  }
   currentLauncherView = view;
   startMenuAudio();
   launcherMainMenu.style.display = view === "main" ? "flex" : "none";
@@ -230,6 +431,25 @@ function showLauncherView(view) {
     getInfoNavigableElements().forEach((element) => element.classList.remove("launcher-nav-active"));
   }
   setLauncherStatus("");
+}
+
+function goBackLauncherView() {
+  if (currentLauncherView === "play") {
+    const newProfileForm = document.getElementById("new-profile-form");
+    if (newProfileForm && !newProfileForm.classList.contains("hidden")) {
+      newProfileForm.classList.add("hidden");
+      return;
+    }
+  }
+
+  if (launcherViewHistory.length > 1) {
+    launcherViewHistory.pop();
+    const previousView = launcherViewHistory[launcherViewHistory.length - 1] || "main";
+    showLauncherView(previousView, { fromHistory: true });
+    return;
+  }
+
+  showLauncherView("main", { fromHistory: true });
 }
 
 function loadConfigIntoForm(cfg) {
@@ -269,6 +489,25 @@ function buildConfigFromForm() {
       reconnectBackoffMaxMs: Number.parseInt(document.getElementById("cfg-reconnect-backoff-max").value || "4000", 10) || 4000,
       reconnectJitterRatio: Number.parseFloat(document.getElementById("cfg-reconnect-jitter").value || "0.2") || 0.2,
       menuBackgroundMode: bgVideoModeSelect ? bgVideoModeSelect.value : "auto",
+    },
+  };
+}
+
+function buildMergedConfig(baseConfig) {
+  const base = baseConfig && typeof baseConfig === "object" ? baseConfig : {};
+  const next = buildConfigFromForm();
+  const launcherBase = base.launcher && typeof base.launcher === "object" ? base.launcher : {};
+  const launcherNext = next.launcher && typeof next.launcher === "object" ? next.launcher : {};
+  return {
+    ...base,
+    clientId: next.clientId,
+    launcher: {
+      ...launcherBase,
+      ...launcherNext,
+      downloads: {
+        ...(launcherBase.downloads && typeof launcherBase.downloads === "object" ? launcherBase.downloads : {}),
+        javaPath: String(gameJavaPathInput?.value || launcherBase?.downloads?.javaPath || "").trim(),
+      },
     },
   };
 }
@@ -344,6 +583,7 @@ function bindClick(id, handler) {
 function initLauncherMenu() {
   bindClick("menu-play-btn", async () => {
     showLauncherView("play");
+    switchPlayTab(activePlayTab);
     if (launcherAPI) {
       const last = await launcherAPI.getLastProfile();
       if (last) {
@@ -352,6 +592,13 @@ function initLauncherMenu() {
         document.getElementById("new-port").value = String(last.port || 25565);
         document.getElementById("new-version").value = last.version || "";
       }
+      const cfg = await launcherAPI.getConfig();
+      const javaPath = String(cfg?.launcher?.downloads?.javaPath || "").trim();
+      if (gameJavaPathInput) gameJavaPathInput.value = javaPath;
+      if (!gameUsernameInput.value) gameUsernameInput.value = String(last?.username || "JugadorOffline");
+      syncVersionTypeFiltersUI();
+      await loadGameCatalog(false);
+      updateFilterVisibilityByDistribution();
     }
   });
 
@@ -365,10 +612,52 @@ function initLauncherMenu() {
   bindClick("continue-last-btn", bootContinue);
   bindClick("create-new-btn", () => document.getElementById("new-profile-form").classList.remove("hidden"));
   bindClick("start-new-profile-btn", bootNewProfile);
+  bindClick("game-refresh-catalog-btn", async () => {
+    await loadGameCatalog(true);
+  });
+  bindClick("game-launch-btn", async () => {
+    if (!launcherAPI) return;
+    const selected = gameVersionSelect?.selectedOptions?.[0];
+    if (!selected) return setGameStatus("Selecciona una versión para lanzar.", true);
+    const authMode = String(gameAuthModeSelect?.value || "offline");
+    const source = selected.dataset.source || "vanilla";
+    const versionId = selected.value;
+    const loaderVersion = selected.dataset.loaderVersion || "";
+    const javaPath = String(gameJavaPathInput?.value || "").trim();
+    if (javaPath) await launcherAPI.setJavaPath(javaPath);
+    const result = await ensureInstalledThenLaunch({
+      source,
+      versionId,
+      loaderVersion,
+      authMode,
+      username: String(gameUsernameInput?.value || "JugadorOffline").trim() || "JugadorOffline",
+      javaPath,
+    });
+    if (!result.ok) return setGameStatus(result.error || "No se pudo lanzar.", true);
+    setGameStatus(`Juego iniciado (PID ${result.pid || "?"})`);
+  });
+  bindClick("game-stop-btn", async () => {
+    if (!launcherAPI) return;
+    const res = await launcherAPI.stopGame();
+    if (!res?.ok) return setGameStatus(res?.error || "No se pudo cerrar el juego.", true);
+    setGameStatus("Proceso del juego cerrado.");
+  });
+  bindClick("game-scan-java-btn", async () => {
+    if (!launcherAPI) return;
+    setGameStatus("Buscando instalaciones de Java...");
+    const res = await launcherAPI.getJavaRuntimes();
+    if (!res?.ok) return setGameStatus(res?.error || "No se pudo detectar Java.", true);
+    const runtime = Array.isArray(res.runtimes) && res.runtimes.length ? res.runtimes[0] : null;
+    if (!runtime) return setGameStatus("No se encontró Java automáticamente. Define la ruta manualmente.", true);
+    if (gameJavaPathInput) gameJavaPathInput.value = runtime.path;
+    await launcherAPI.setJavaPath(runtime.path);
+    setGameStatus(`Java detectado: ${runtime.path}`);
+  });
   bindClick("save-config-btn", async () => {
     if (!launcherAPI) return;
     try {
-      const parsed = buildConfigFromForm();
+      const currentConfig = await launcherAPI.getConfig();
+      const parsed = buildMergedConfig(currentConfig);
       const result = await launcherAPI.saveConfig(parsed);
       if (!result?.ok) return setLauncherStatus(result?.error || "No se pudo guardar.", true);
       currentBgVideoMode = String(parsed.launcher.menuBackgroundMode || "auto").toLowerCase();
@@ -380,6 +669,21 @@ function initLauncherMenu() {
   });
 
   if (bgVideoModeSelect) bgVideoModeSelect.addEventListener("change", () => applyLauncherBackgroundVideo(bgVideoModeSelect.value));
+  if (playTabBotBtn) playTabBotBtn.addEventListener("click", () => switchPlayTab("bot"));
+  if (playTabJavaBtn) playTabJavaBtn.addEventListener("click", () => switchPlayTab("java"));
+  if (gameDistributionSelect) gameDistributionSelect.addEventListener("change", () => {
+    updateFilterVisibilityByDistribution();
+    refreshVersionSelect();
+  });
+  if (filterRelease) filterRelease.addEventListener("change", () => { versionTypeFilters.release = Boolean(filterRelease.checked); refreshVersionSelect(); });
+  if (filterSnapshot) filterSnapshot.addEventListener("change", () => { versionTypeFilters.snapshot = Boolean(filterSnapshot.checked); refreshVersionSelect(); });
+  if (filterOldBeta) filterOldBeta.addEventListener("change", () => { versionTypeFilters.old_beta = Boolean(filterOldBeta.checked); refreshVersionSelect(); });
+  if (filterOldAlpha) filterOldAlpha.addEventListener("change", () => { versionTypeFilters.old_alpha = Boolean(filterOldAlpha.checked); refreshVersionSelect(); });
+  if (gameAuthModeSelect) gameAuthModeSelect.addEventListener("change", () => {
+    const authMode = String(gameAuthModeSelect.value || "offline");
+    if (gameUsernameInput) gameUsernameInput.disabled = authMode !== "offline";
+  });
+  switchPlayTab("bot");
   showLauncherView("main");
 }
 
@@ -476,7 +780,7 @@ document.addEventListener("keydown", (event) => {
 
     if (event.key === "Escape") {
       event.preventDefault();
-      showLauncherView("main");
+      goBackLauncherView();
     }
     return;
   }
@@ -508,7 +812,7 @@ document.addEventListener("keydown", (event) => {
 
     if (event.key === "Escape") {
       event.preventDefault();
-      showLauncherView("main");
+      goBackLauncherView();
     }
     return;
   }
@@ -538,7 +842,7 @@ document.addEventListener("keydown", (event) => {
 
     if (event.key === "Escape") {
       event.preventDefault();
-      showLauncherView("main");
+      goBackLauncherView();
     }
   }
 });
