@@ -44,10 +44,7 @@ function httpsGetBuffer(url, timeoutMs = 30000) {
   });
 }
 
-async function fetchJson(url, timeoutMs = 30000) {
-  const buf = await httpsGetBuffer(url, timeoutMs);
-  return JSON.parse(buf.toString("utf8"));
-}
+const fetchJson = async (url, timeoutMs = 30000) => JSON.parse((await httpsGetBuffer(url, timeoutMs)).toString("utf8"));
 
 async function httpsRequestJson(url, { method = "GET", headers = {}, body = null, timeoutMs = 30000 } = {}) {
   return new Promise((resolve, reject) => {
@@ -68,11 +65,8 @@ async function httpsRequestJson(url, { method = "GET", headers = {}, body = null
         res.on("end", () => {
           try {
             const raw = Buffer.concat(chunks).toString("utf8");
-            const asJson = raw ? JSON.parse(raw) : {};
-            if (res.statusCode < 200 || res.statusCode >= 300) {
-              return reject(new Error(`HTTP ${res.statusCode} for ${url}: ${raw}`));
-            }
-            return resolve(asJson);
+            if (res.statusCode < 200 || res.statusCode >= 300) return reject(new Error(`HTTP ${res.statusCode} for ${url}: ${raw}`));
+            return resolve(raw ? JSON.parse(raw) : {});
           } catch (error) {
             return reject(error);
           }
@@ -86,22 +80,11 @@ async function httpsRequestJson(url, { method = "GET", headers = {}, body = null
   });
 }
 
-async function ensureDir(dir) {
-  await fsp.mkdir(dir, { recursive: true });
-}
+const ensureDir = (dir) => fsp.mkdir(dir, { recursive: true });
 
-function sha1Hex(buffer) {
-  return crypto.createHash("sha1").update(buffer).digest("hex");
-}
+const sha1Hex = (buffer) => crypto.createHash("sha1").update(buffer).digest("hex");
 
-async function fileExists(filePath) {
-  try {
-    await fsp.access(filePath, fs.constants.F_OK);
-    return true;
-  } catch {
-    return false;
-  }
-}
+const fileExists = async (filePath) => fsp.access(filePath, fs.constants.F_OK).then(() => true).catch(() => false);
 
 async function verifyFile(filePath, expectedSha1, expectedSize) {
   if (!(await fileExists(filePath))) return false;
@@ -164,14 +147,14 @@ async function downloadFileWithVerify(url, destPath, { sha1 = "", size = -1, ret
                 await fsp.rename(tmpPath, destPath);
                 resolve();
               } catch (err) {
-                await fsp.rm(tmpPath, { force: true }).catch(() => {});
+                await fsp.rm(tmpPath, { force: true }).catch(() => { });
                 reject(err);
               }
             });
           });
 
           out.on("error", async (err) => {
-            await fsp.rm(tmpPath, { force: true }).catch(() => {});
+            await fsp.rm(tmpPath, { force: true }).catch(() => { });
             reject(err);
           });
         });
@@ -200,11 +183,7 @@ function applyRuleSet(rules, osName = "windows", featureFlags = null) {
     if (featuresRule) {
       const flags = featureFlags && typeof featureFlags === "object" ? featureFlags : {};
       for (const [key, expected] of Object.entries(featuresRule)) {
-        const actual = Boolean(flags[key]);
-        if (actual !== Boolean(expected)) {
-          matchesFeatures = false;
-          break;
-        }
+        if (Boolean(flags[key]) !== Boolean(expected)) { matchesFeatures = false; break; }
       }
     }
     if (!matchesFeatures) continue;
@@ -227,9 +206,7 @@ function toArtifactPath(name) {
 
 function formatJvmRuleArg(arg, replacements) {
   let output = String(arg);
-  for (const [key, value] of Object.entries(replacements)) {
-    output = output.replaceAll(`\${${key}}`, String(value));
-  }
+  for (const [key, value] of Object.entries(replacements)) output = output.replaceAll(`\${${key}}`, String(value));
   return output;
 }
 
@@ -237,11 +214,8 @@ function parseLaunchArgsString(raw) {
   const input = String(raw || "").trim();
   if (!input) return [];
   const out = [];
-  let token = "";
-  let quote = "";
-  let escaped = false;
-  for (let i = 0; i < input.length; i += 1) {
-    const ch = input[i];
+  let token = "", quote = "", escaped = false;
+  for (const ch of input) {
     if (escaped) {
       token += ch;
       escaped = false;
@@ -275,13 +249,8 @@ function parseLaunchArgsString(raw) {
 }
 
 function parseLibraryNameParts(name) {
-  const parts = String(name || "").split(":");
-  return {
-    group: parts[0] || "",
-    artifact: parts[1] || "",
-    version: parts[2] || "",
-    classifier: parts[3] || "",
-  };
+  const [group = "", artifact = "", version = "", classifier = ""] = String(name || "").split(":");
+  return { group, artifact, version, classifier };
 }
 
 function resolveWindowsNativeDownload(lib) {
@@ -361,30 +330,22 @@ class GameLauncherService {
   }
 
   getRuntimeStallThresholdMs() {
-    const cfg = this.loadConfig() || {};
-    const raw = Number.parseInt(String(cfg?.launcher?.downloads?.runtimeStallThresholdMs || "15000"), 10);
+    const raw = Number.parseInt(String((this.loadConfig() || {})?.launcher?.downloads?.runtimeStallThresholdMs || "15000"), 10);
     return Number.isFinite(raw) && raw >= 5000 ? raw : 15000;
   }
 
   getMinecraftDir() {
-    const cfg = this.loadConfig() || {};
-    const customDir = cfg?.launcher?.downloads?.minecraftDir;
+    const customDir = (this.loadConfig() || {})?.launcher?.downloads?.minecraftDir;
     if (customDir && String(customDir).trim()) return String(customDir).trim();
     return path.join(process.env.APPDATA || path.join(os.homedir(), "AppData", "Roaming"), ".minecraft");
   }
 
-  getCatalogCacheFile() {
-    return path.join(this.appRoot, "config", "catalog-cache.json");
-  }
+  getCatalogCacheFile() { return path.join(this.appRoot, "config", "catalog-cache.json"); }
 
   async readCatalogCache() {
     const file = this.getCatalogCacheFile();
     if (!(await fileExists(file))) return null;
-    try {
-      return JSON.parse(await fsp.readFile(file, "utf8"));
-    } catch {
-      return null;
-    }
+    try { return JSON.parse(await fsp.readFile(file, "utf8")); } catch { return null; }
   }
 
   async writeCatalogCache(cache) {
@@ -506,17 +467,14 @@ class GameLauncherService {
     }
 
     const available = [];
-    for (const cand of candidates) {
-      if (await fileExists(cand.path)) available.push(cand);
-    }
+    for (const cand of candidates) if (await fileExists(cand.path)) available.push(cand);
     return available;
   }
 
   async resolveJavaPath(preferredPath = "") {
     if (preferredPath && await fileExists(preferredPath)) return preferredPath;
     const runtimes = await this.detectJavaRuntimes();
-    if (runtimes.length > 0) return runtimes[0].path;
-    return "java";
+    return runtimes.length > 0 ? runtimes[0].path : "java";
   }
 
   async buildJavaCandidates({ preferredPath = "", versionId = "" } = {}) {
@@ -671,11 +629,9 @@ class GameLauncherService {
   getInstallStatus(installId = "") {
     if (installId) {
       const job = this.installJobs.get(installId);
-      if (!job) return { ok: false, error: "Instalación no encontrada." };
-      return { ok: true, status: job.status };
+      return job ? { ok: true, status: job.status } : { ok: false, error: "Instalación no encontrada." };
     }
-    const all = [...this.installJobs.values()].map((j) => j.status);
-    return { ok: true, statuses: all };
+    return { ok: true, statuses: [...this.installJobs.values()].map((j) => j.status) };
   }
 
   cancelInstall(installId) {
@@ -1045,9 +1001,7 @@ class GameLauncherService {
 
   stopGame() {
     if (!this.runningGameProcess) return { ok: true };
-    try {
-      this.runningGameProcess.kill();
-    } catch {}
+    try { this.runningGameProcess.kill(); } catch { }
     this.runningGameProcess = null;
     this.lastGameStatus.running = false;
     this.lastGameStatus.updatedAt = Date.now();
@@ -1085,7 +1039,7 @@ class GameLauncherService {
           throw new Error(`No se pudieron extraer nativos desde ${jarPath}. ${stderr || ""}`.trim());
         }
       } finally {
-        await fsp.rm(tmpZipPath, { force: true }).catch(() => {});
+        await fsp.rm(tmpZipPath, { force: true }).catch(() => { });
       }
     }
     const dllCount = await this.countDllsInDirectory(nativesDir);

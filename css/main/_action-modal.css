@@ -11,7 +11,7 @@
     align-items: center;
     justify-content: center;
     z-index: 10000;
-    transition: opacity 0.2s ease;
+    transition: opacity 0.25s cubic-bezier(0.2, 0.8, 0.2, 1);
     opacity: 0;
 }
 
@@ -31,7 +31,7 @@
         0 24px 60px rgba(0, 0, 0, 0.55),
         inset 0 1px 0 rgba(255, 255, 255, 0.04);
     transform: scale(0.9);
-    transition: transform 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+    transition: transform 0.25s cubic-bezier(0.16, 1, 0.3, 1);
 }
 
 .action-modal.visible .action-modal-content {
@@ -65,7 +65,7 @@
     align-items: center;
     justify-content: center;
     cursor: pointer;
-    transition: background 0.2s, color 0.2s, border-color 0.2s;
+    transition: background 0.25s, color 0.25s, border-color 0.25s;
 }
 
 .action-modal-close:hover {
@@ -93,7 +93,7 @@
     font-size: 13.5px;
     font-weight: 700;
     cursor: pointer;
-    transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+    transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1);
     border: 1px solid transparent;
     text-align: center;
 }

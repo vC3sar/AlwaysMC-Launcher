@@ -1,3 +1,4 @@
+"use strict";
 const RPC = require("discord-rpc");
 
 const PLACEHOLDER_IDS = new Set(["your_discord_app_client_id_here", "TU_CLIENT_ID_AQUÍ"]);
@@ -18,75 +19,73 @@ const state = {
   lifecycleStartAt: 0,
 };
 
-function shouldVerboseAll() {
-  return state.verboseMode === "all";
+// ── Logging ───────────────────────────────────────────────────────────────────
+function _elapsed() {
+  return state.debugLifecycle && state.lifecycleStartAt ? ` +${Date.now() - state.lifecycleStartAt}ms` : "";
 }
 
-function elapsedPrefix() {
-  if (!state.debugLifecycle || !state.lifecycleStartAt) return "";
-  return ` +${Date.now() - state.lifecycleStartAt}ms`;
+function _log(tag, message) {
+  console.log(`[DiscordRPC${tag}]${_elapsed()} ${message}`);
 }
 
-function logInfo(message) {
-  console.log(`[DiscordRPC]${elapsedPrefix()} ${message}`);
-}
+const logInfo = (msg) => _log("", msg);
+const logDebug = (msg) => state.verboseMode === "all" && _log(":debug", msg);
+const logError = (phase, error) => _log(":error",
+  `phase=${phase} code=${error?.code ?? "unknown"} message=${_errMsg(error)}`);
 
-function logDebug(message) {
-  if (!shouldVerboseAll()) return;
-  console.log(`[DiscordRPC:debug]${elapsedPrefix()} ${message}`);
-}
-
-function logError(phase, error) {
-  const code = error && error.code ? String(error.code) : "unknown";
-  const message = error && error.message ? error.message : String(error || "unknown error");
-  console.log(`[DiscordRPC:error]${elapsedPrefix()} phase=${phase} code=${code} message=${message}`);
+function _errMsg(error) {
+  return error?.message ?? String(error ?? "unknown error");
 }
 
 function maskClientId(clientId) {
   const id = String(clientId || "");
   if (!id) return "empty";
   if (id.length <= 4) return "*".repeat(id.length);
-  return `${"*".repeat(Math.max(0, id.length - 4))}${id.slice(-4)}`;
+  return `${"*".repeat(id.length - 4)}${id.slice(-4)}`;
 }
 
 function logStateDebug(label) {
-  if (!shouldVerboseAll()) return;
-  logDebug(
-    `${label} state=${JSON.stringify({
-      active: state.active,
-      isReady: state.isReady,
-      isConnecting: state.isConnecting,
-      hasRpc: Boolean(state.rpc),
-      hasPendingActivity: Boolean(state.lastActivityPayload),
-      hasLastError: Boolean(state.lastError),
-      hasReconnectTimer: Boolean(state.reconnectTimer),
-      clientIdSet: Boolean(state.currentClientId),
-    })}`
-  );
+  if (state.verboseMode !== "all") return;
+  logDebug(`${label} state=${JSON.stringify({
+    active: state.active,
+    isReady: state.isReady,
+    isConnecting: state.isConnecting,
+    hasRpc: Boolean(state.rpc),
+    hasPendingActivity: Boolean(state.lastActivityPayload),
+    hasLastError: Boolean(state.lastError),
+    hasReconnectTimer: Boolean(state.reconnectTimer),
+    clientIdSet: Boolean(state.currentClientId),
+  })}`);
+}
+
+// ── State helpers ─────────────────────────────────────────────────────────────
+// Centralises the pair that was duplicated in 3 event handlers.
+function _resetConnectFlags() {
+  state.isReady = false;
+  state.isConnecting = false;
 }
 
 function clearReconnectTimer() {
-  if (state.reconnectTimer) {
-    clearTimeout(state.reconnectTimer);
-    state.reconnectTimer = null;
-  }
+  if (!state.reconnectTimer) return;
+  clearTimeout(state.reconnectTimer);
+  state.reconnectTimer = null;
 }
 
 function isValidClientId(clientId) {
   const id = typeof clientId === "string" ? clientId.trim() : "";
-  if (!id) return { ok: false, normalized: "", reason: "clientId vacío" };
+  if (!id) return { ok: false, normalized: id, reason: "clientId vacío" };
   if (PLACEHOLDER_IDS.has(id)) return { ok: false, normalized: id, reason: "clientId placeholder" };
   return { ok: true, normalized: id, reason: "" };
 }
 
+// ── Activity ──────────────────────────────────────────────────────────────────
 function buildActivityPayload({ serverIp, version, username }) {
-  const server = String(serverIp || "Esperando servidor...").trim() || "Esperando servidor...";
+  const server = (String(serverIp || "").trim()) || "Esperando servidor...";
   const ver = String(version || "").trim();
-  const stateText = ver ? `${server} | ${ver}` : server;
   const user = String(username || "Usuario").trim();
   return {
     details: `${user} burlando el AFK 🗿`,
-    state: `Jugando en: ${stateText}`,
+    state: `Jugando en: ${ver ? `${server} | ${ver}` : server}`,
     startTimestamp: new Date(),
     largeImageKey: "logo",
     largeImageText: "MC-BETA",
@@ -96,35 +95,35 @@ function buildActivityPayload({ serverIp, version, username }) {
   };
 }
 
+function flushPendingActivity() {
+  if (!state.rpc || !state.isReady || !state.lastActivityPayload) return;
+  const payload = state.lastActivityPayload;
+  state.rpc.setActivity(payload)
+    .then(() => {
+      logInfo("activity enviada a Discord");
+      logDebug(`activity payload=${JSON.stringify({ details: payload.details, state: payload.state })}`);
+      logStateDebug("activity-sent");
+    })
+    .catch((err) => { state.lastError = err; logError("setActivity", err); });
+}
+
+// ── RPC lifecycle ─────────────────────────────────────────────────────────────
 function clearRpcClient() {
   if (!state.rpc) return;
-  const currentRpc = state.rpc;
-  try {
-    if (typeof currentRpc.removeAllListeners === "function") {
-      currentRpc.removeAllListeners();
-    }
-    const transport = currentRpc.transport;
-    const hasSocket = Boolean(transport && transport.socket);
-    if (!hasSocket) {
-      logDebug("destroy skipped: transport/socket no disponible");
-    } else if (typeof currentRpc.destroy === "function") {
-      try {
-        const destroyResult = currentRpc.destroy();
-        if (destroyResult && typeof destroyResult.catch === "function") {
-          destroyResult.catch((error) => {
-            logDebug(`destroy async ignored: ${error && error.message ? error.message : String(error)}`);
-          });
-        }
-      } catch (error) {
-        logDebug(`destroy sync ignored: ${error && error.message ? error.message : String(error)}`);
-      }
-    }
-  } catch (error) {
-    logDebug(`destroy ignored: ${error && error.message ? error.message : String(error)}`);
-  }
+  const rpc = state.rpc;
   state.rpc = null;
-  state.isReady = false;
-  state.isConnecting = false;
+  _resetConnectFlags();
+  try {
+    rpc.removeAllListeners?.();
+    if (rpc.transport?.socket) {
+      const p = rpc.destroy?.();
+      p?.catch?.((e) => logDebug(`destroy async ignored: ${_errMsg(e)}`));
+    } else {
+      logDebug("destroy skipped: transport/socket no disponible");
+    }
+  } catch (e) {
+    logDebug(`destroy ignored: ${_errMsg(e)}`);
+  }
   logStateDebug("rpc-cleared");
 }
 
@@ -138,21 +137,6 @@ function scheduleReconnect() {
   }, RETRY_DELAY_MS);
   logDebug(`reconnect scheduled in ${RETRY_DELAY_MS}ms`);
   logStateDebug("reconnect-scheduled");
-}
-
-function flushPendingActivity() {
-  if (!state.rpc || !state.isReady || !state.lastActivityPayload) return;
-  const payload = state.lastActivityPayload;
-  state.rpc.setActivity(payload)
-    .then(() => {
-      logInfo("activity enviada a Discord");
-      logDebug(`activity payload=${JSON.stringify({ details: payload.details, state: payload.state })}`);
-      logStateDebug("activity-sent");
-    })
-    .catch((error) => {
-      state.lastError = error;
-      logError("setActivity", error);
-    });
 }
 
 function connectRpc() {
@@ -171,6 +155,14 @@ function connectRpc() {
   state.rpc = new RPC.Client({ transport: "ipc" });
   logStateDebug("rpc-client-created");
 
+  // Consolidated: all three failure paths share _resetConnectFlags + scheduleReconnect.
+  const onFailure = (phase, err) => {
+    if (err) { state.lastError = err; logError(phase, err); }
+    _resetConnectFlags();
+    logStateDebug(`${phase}-failed`);
+    scheduleReconnect();
+  };
+
   state.rpc.on("ready", () => {
     state.isReady = true;
     state.isConnecting = false;
@@ -180,56 +172,34 @@ function connectRpc() {
   });
 
   state.rpc.on("disconnected", () => {
-    state.isReady = false;
-    state.isConnecting = false;
     logInfo("desconectado de Discord");
-    logStateDebug("rpc-disconnected");
-    scheduleReconnect();
+    onFailure("rpc-disconnected", null);
   });
 
-  state.rpc.on("error", (error) => {
-    state.lastError = error;
-    state.isReady = false;
-    state.isConnecting = false;
-    logError("rpc-event", error);
-    logStateDebug("rpc-error-event");
-    scheduleReconnect();
-  });
+  state.rpc.on("error", (err) => onFailure("rpc-error-event", err));
 
   state.rpc.login({ clientId: state.currentClientId })
-    .then(() => {
-      logDebug("login ok");
-      logStateDebug("login-ok");
-    })
-    .catch((error) => {
-      state.lastError = error;
-      state.isReady = false;
-      state.isConnecting = false;
-      logError("login", error);
-      logStateDebug("login-failed");
-      scheduleReconnect();
-    });
+    .then(() => { logDebug("login ok"); logStateDebug("login-ok"); })
+    .catch((err) => onFailure("login", err));
 }
 
+// ── Public API ────────────────────────────────────────────────────────────────
 function initDiscordPresence({ clientId, verboseMode, debugLifecycle } = {}) {
   state.verboseMode = String(verboseMode || "app").toLowerCase() === "all" ? "all" : "app";
   state.debugLifecycle = Boolean(debugLifecycle);
   state.lifecycleStartAt = Date.now();
   state.active = true;
-  logInfo(
-    `init requested verboseMode=${state.verboseMode} debugLifecycle=${state.debugLifecycle ? "1" : "0"} clientId=${maskClientId(clientId)} len=${String(clientId || "").trim().length}`
-  );
+
+  logInfo(`init requested verboseMode=${state.verboseMode} debugLifecycle=${state.debugLifecycle ? "1" : "0"} clientId=${maskClientId(clientId)} len=${String(clientId || "").trim().length}`);
   logInfo("canal de salida: consola del proceso Node/Electron main (no UI del launcher)");
 
   const validation = isValidClientId(clientId);
   if (!validation.ok) {
     state.currentClientId = "";
-    if (!state.warnedInvalidClientId) {
-      logInfo(`desactivado: ${validation.reason}`);
-      state.warnedInvalidClientId = true;
-    } else {
-      logDebug(`desactivado (ya informado): ${validation.reason}`);
-    }
+    const already = state.warnedInvalidClientId;
+    state.warnedInvalidClientId = true;
+    already ? logDebug(`desactivado (ya informado): ${validation.reason}`)
+      : logInfo(`desactivado: ${validation.reason}`);
     logStateDebug("init-invalid-clientId");
     return false;
   }
@@ -247,8 +217,7 @@ function initDiscordPresence({ clientId, verboseMode, debugLifecycle } = {}) {
 }
 
 function updateDiscordPresence({ serverIp, version, username } = {}) {
-  const payload = buildActivityPayload({ serverIp, version, username });
-  state.lastActivityPayload = payload;
+  state.lastActivityPayload = buildActivityPayload({ serverIp, version, username });
   if (!state.active || !state.currentClientId) {
     logDebug("activity cacheada: RPC inactivo o sin clientId");
     logStateDebug("update-cached-inactive");
@@ -271,8 +240,4 @@ function shutdownDiscordPresence() {
   logStateDebug("shutdown");
 }
 
-module.exports = {
-  initDiscordPresence,
-  updateDiscordPresence,
-  shutdownDiscordPresence,
-};
+module.exports = { initDiscordPresence, updateDiscordPresence, shutdownDiscordPresence };

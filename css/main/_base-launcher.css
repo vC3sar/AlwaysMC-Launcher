@@ -108,7 +108,7 @@ body::-webkit-scrollbar-corner,
     justify-content: center;
     cursor: pointer;
     opacity: 0.78;
-    transition: opacity 0.2s ease, background 0.2s ease, border-color 0.2s ease;
+    transition: opacity 0.25s cubic-bezier(0.2, 0.8, 0.2, 1), background 0.25s cubic-bezier(0.2, 0.8, 0.2, 1), border-color 0.25s cubic-bezier(0.2, 0.8, 0.2, 1);
 }
 
 .launcher-audio-toggle:hover {
@@ -403,7 +403,7 @@ body::-webkit-scrollbar-corner,
     align-items: center;
     justify-content: center;
     cursor: pointer;
-    transition: background 0.14s ease, border-color 0.14s ease, color 0.14s ease, transform 0.12s ease;
+    transition: background 0.25s cubic-bezier(0.2, 0.8, 0.2, 1), border-color 0.25s cubic-bezier(0.2, 0.8, 0.2, 1), color 0.25s cubic-bezier(0.2, 0.8, 0.2, 1), transform 0.25s cubic-bezier(0.2, 0.8, 0.2, 1);
 }
 
 .launcher-status-icon-side-btn:hover {
@@ -450,7 +450,7 @@ body::-webkit-scrollbar-corner,
     font-size: 14px;
     line-height: 1;
     color: rgba(245, 208, 111, 0.95);
-    transition: transform 0.16s ease;
+    transition: transform 0.25s cubic-bezier(0.2, 0.8, 0.2, 1);
 }
 
 .launcher-advanced-toggle[open] summary {
@@ -510,7 +510,7 @@ body::-webkit-scrollbar-corner,
     border-color: rgba(245, 208, 111, 0.82);
     background: linear-gradient(180deg, rgba(196, 78, 56, 0.95), rgba(138, 49, 36, 0.95));
     box-shadow: 0 10px 24px rgba(0, 0, 0, 0.35), 0 0 0 1px rgba(245, 208, 111, 0.24);
-    transition: transform 0.14s ease, box-shadow 0.16s ease, filter 0.16s ease;
+    transition: transform 0.25s cubic-bezier(0.2, 0.8, 0.2, 1), box-shadow 0.25s cubic-bezier(0.2, 0.8, 0.2, 1), filter 0.25s cubic-bezier(0.2, 0.8, 0.2, 1);
 }
 
 #game-launch-btn:hover {
@@ -713,7 +713,7 @@ body::-webkit-scrollbar-corner,
     gap: 9px;
     color: #eadfcd;
     font-weight: 600;
-    transition: border-color 0.18s ease, background 0.18s ease, box-shadow 0.18s ease, transform 0.12s ease;
+    transition: border-color 0.25s cubic-bezier(0.2, 0.8, 0.2, 1), background 0.25s cubic-bezier(0.2, 0.8, 0.2, 1), box-shadow 0.25s cubic-bezier(0.2, 0.8, 0.2, 1), transform 0.25s cubic-bezier(0.2, 0.8, 0.2, 1);
     cursor: pointer;
 }
 
@@ -740,7 +740,7 @@ body::-webkit-scrollbar-corner,
     align-items: center;
     gap: 10px;
     cursor: pointer;
-    transition: border-color 0.16s ease, background 0.16s ease, box-shadow 0.16s ease;
+    transition: border-color 0.25s cubic-bezier(0.2, 0.8, 0.2, 1), background 0.25s cubic-bezier(0.2, 0.8, 0.2, 1), box-shadow 0.25s cubic-bezier(0.2, 0.8, 0.2, 1);
 }
 
 #launcher-config-view .launcher-config-check:hover {
@@ -774,7 +774,7 @@ body::-webkit-scrollbar-corner,
     place-items: center;
     margin: 0;
     flex-shrink: 0;
-    transition: border-color 0.18s ease, background 0.18s ease, box-shadow 0.18s ease;
+    transition: border-color 0.25s cubic-bezier(0.2, 0.8, 0.2, 1), background 0.25s cubic-bezier(0.2, 0.8, 0.2, 1), box-shadow 0.25s cubic-bezier(0.2, 0.8, 0.2, 1);
 }
 
 .launcher-version-filters .launcher-check input[type="checkbox"]::after {
@@ -785,7 +785,7 @@ body::-webkit-scrollbar-corner,
     background: transparent;
     transform: scale(0.6);
     opacity: 0;
-    transition: opacity 0.14s ease, transform 0.14s ease, background 0.14s ease;
+    transition: opacity 0.25s cubic-bezier(0.2, 0.8, 0.2, 1), transform 0.25s cubic-bezier(0.2, 0.8, 0.2, 1), background 0.25s cubic-bezier(0.2, 0.8, 0.2, 1);
 }
 
 .launcher-version-filters .launcher-check:has(input[type="checkbox"]:checked) {
