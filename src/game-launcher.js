@@ -963,7 +963,12 @@ class GameLauncherService {
     const effectiveExtraJvmArgs = String(extraJvmArgs || cfgDownloads.extraJvmArgs || "").trim();
     const effectiveExtraGameArgs = String(extraGameArgs || cfgDownloads.extraGameArgs || "").trim();
 
-    const jvmArgs = [`-Xms${effectiveMinMemory}M`, `-Xmx${effectiveMaxMemory}M`];
+    const jvmArgs = [
+      `-Xms${effectiveMinMemory}M`,
+      `-Xmx${effectiveMaxMemory}M`,
+      "-Dfile.encoding=UTF-8",
+      "-Dclient.encoding.override=UTF-8"
+    ];
     if (Array.isArray(versionMeta.arguments?.jvm)) {
       for (const entry of versionMeta.arguments.jvm) {
         if (typeof entry === "string") {
