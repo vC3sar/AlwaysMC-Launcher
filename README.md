@@ -75,12 +75,42 @@ npm start
 
 ## 📂 Estructura del Proyecto
 
-*   `main.js`: Lógica principal del menú y gestión de perfiles.
-*   `fn/discord.js`: Módulo encargado de la comunicación con la API de Discord.
-*   `config.json`: Variables de entorno y configuración técnica.
-*   `config/ignore.json`: Lista negra de mensajes para filtrar la consola en modo NoGUI. 
-*   `index.html`: Panel web local para el chat del bot y la información de la sesión.
-*   `profiles.json`: Almacenamiento local del estado del usuario.
+El proyecto está organizado en una arquitectura modular que separa el proceso principal (Electron Main), las interfaces de usuario (Electron Renderer / Web local) y la lógica de integración del bot de Minecraft (Mineflayer):
+
+### 📄 Archivos del Directorio Raíz
+*   `mcbeta-context.md`: Contexto unificado y optimizado de todo el código del repositorio (generado mediante Repomix) diseñado especialmente para análisis e interacciones eficientes con Inteligencia Artificial.
+*   `main.js`: Punto de entrada de Electron. Configura e inicializa el ciclo de vida de la aplicación y la ventana principal.
+*   `preload.js`: Script de precarga de Electron que expone de forma segura las APIs del sistema y comunicación IPC al frontend.
+*   `minelight.js`: Servidor WebSocket local que actúa como puente de comunicación en tiempo real entre la instancia del bot Mineflayer y el frontend web.
+*   `index.html`: Dashboard web local expuesto para monitorear el chat, estado y estadísticas de la sesión NoGUI.
+*   `launcher.html`: Interfaz visual del launcher de escritorio de Minecraft.
+*   `app.html`: Interfaz del panel web embebido para interactuar con la sesión en tiempo real.
+*   `config.json`: Configuración técnica de Rich Presence (Discord client ID) y otros parámetros globales.
+*   `profiles.json`: Almacenamiento local para persistir el último perfil configurado por el usuario (usuario, IP, puerto, versión elegida).
+*   `package.json`: Archivo de configuración de Node.js con la definición de scripts (`npm start`) y dependencias principales.
+
+### 🛠️ Carpeta `src/` (Lógica Central)
+*   `src/game-launcher.js`: Módulo principal del instalador y lanzador del cliente de Minecraft. Controla descargas de assets, librerías oficiales de Mojang, instalación automatizada de Fabric y ejecución de instancias.
+*   `src/game-launcher/`:
+    *   `constants.js`: Constantes globales, URLs de descargas oficiales y endpoints de APIs.
+    *   `version-java.js`: Detección automática y emparejamiento inteligente de versiones de Java recomendadas según la versión de Minecraft.
+*   `src/main/`: Lógica central del proceso principal de Electron:
+    *   `bot.js`: Gestor del ciclo de vida de las sesiones del bot de Minecraft.
+    *   `config.js`: Utilidades para la carga, normalización y guardado de configuraciones y perfiles.
+    *   `ipc.js`: Manejadores de comunicación entre el frontend (Renderer) y el backend (Main).
+    *   `window.js`: Controlador de la creación, dimensionamiento y renderizado de las ventanas gráficas.
+*   `src/bot/`: Lógica interna de integración con Mineflayer:
+    *   `bot-lifecycle.js`: Eventos de conexión, desconexión y spawn de los bots.
+    *   `chat.js`: Procesamiento del chat del juego y decodificación de formatos de texto.
+    *   `vitals.js`: Monitoreo del estado de salud, alimentación, ping y posición del bot.
+    *   `menu.js`: Manejo de inventarios y menús dentro del juego.
+    *   `ws-server.js`: Configuración e inicialización del túnel de WebSocket intermedio.
+
+### 🎨 Recursos y Frontend (`css/` y `js/`)
+*   `js/`: Scripts interactivos para las interfaces de usuario de Electron (navegación por teclado, control de pistas de audio de fondo, carga de catálogos oficiales, sincronización del formulario de configuración y actualización del terminal de estado).
+*   `css/`: Hojas de estilo unificadas para el launcher y el panel web (`app.css`, `launcher.css`, `main.css`, `shared.css`), diseñadas para ofrecer una interfaz oscura inmersiva y moderna.
+*   `config/ignore.json`: Lista negra y filtros de palabras/mensajes molestos para limpiar la salida del terminal del bot.
+*   `mp3/` & `mp4/`: Recursos multimedia (música de fondo del menú principal y videos cinemáticos de fondo en bucle de 2K/4K).
 
 ---
 
