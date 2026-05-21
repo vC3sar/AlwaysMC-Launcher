@@ -5,22 +5,26 @@ const windowManager = require("./src/main/window");
 const botManager = require("./src/main/bot");
 const { setupIpcHandlers } = require("./src/main/ipc");
 
-console.log("[Main] main.js cargado - proceso principal activo");
+console.log("[Main] main.js - main process is running");
 
 let gameLauncher = null;
 
 app.whenReady().then(() => {
   console.log("[Main] app.whenReady()");
-  
+
   // Inicializa la config por defecto
-  const initialCfg = configManager.mergeLauncherDefaults(configManager.loadConfig());
+  const initialCfg = configManager.mergeLauncherDefaults(
+    configManager.loadConfig(),
+  );
   configManager.saveConfig(initialCfg);
 
   // Instancia el servicio del launcher
   gameLauncher = new GameLauncherService({
     appRoot: __dirname,
-    loadConfig: () => configManager.mergeLauncherDefaults(configManager.loadConfig()),
-    saveConfig: (cfg) => configManager.saveConfig(configManager.mergeLauncherDefaults(cfg)),
+    loadConfig: () =>
+      configManager.mergeLauncherDefaults(configManager.loadConfig()),
+    saveConfig: (cfg) =>
+      configManager.saveConfig(configManager.mergeLauncherDefaults(cfg)),
     stopBotSession: () => botManager.stopBotSession(),
     onInstallUpdate: () => {},
   });

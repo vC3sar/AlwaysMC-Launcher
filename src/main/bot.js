@@ -12,7 +12,10 @@ class BotManager {
         await this.botRunner.stop();
       }
     } catch (error) {
-      console.log("[BotManager] stopBotSession error:", error && error.message ? error.message : String(error));
+      console.log(
+        "[BotManager] stopBotSession error:",
+        error && error.message ? error.message : String(error),
+      );
     } finally {
       this.botRunner = null;
     }
@@ -22,16 +25,16 @@ class BotManager {
     if (this.botRunner && typeof this.botRunner.stop === "function") {
       await this.stopBotSession();
     }
-    console.log("[BotManager] startBot() solicitado", {
+    console.log("[BotManager] startBot() requested", {
       username: profile?.username,
       ip: profile?.ip,
       port: profile?.port,
       version: profile?.version,
     });
-    
+
     const minelightPath = path.join(__dirname, "../../minelight");
     this.botRunner = require(minelightPath)(profile);
-    console.log("[BotManager] minelight inicializado");
+    console.log("[BotManager] minelight initialized");
     return { ok: true };
   }
 }

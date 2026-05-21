@@ -6,7 +6,9 @@ const nbt = require("prismarine-nbt");
 const { createRuntimeState } = require("./src/bot/state");
 const { extractVitals } = require("./src/bot/vitals");
 const { getArmorDestination, isLikelyFood } = require("./src/bot/menu");
-const { sanitizeVisibleText: sanitizeVisibleTextShared } = require("./src/bot/minecraft-text");
+const {
+  sanitizeVisibleText: sanitizeVisibleTextShared,
+} = require("./src/bot/minecraft-text");
 const { resolveBotRuntimeConfig } = require("./src/bot/launcher-config");
 const {
   decodeMinecraftText: decodeMinecraftTextShared,
@@ -17,7 +19,11 @@ const {
 } = require("./src/bot/minecraft-components");
 const { createWSServerConfig } = require("./src/bot/ws-server");
 const { words: ignoredMessages } = require("./config/ignore.json");
-const { initDiscordPresence, updateDiscordPresence, shutdownDiscordPresence } = require("./fn/discord");
+const {
+  initDiscordPresence,
+  updateDiscordPresence,
+  shutdownDiscordPresence,
+} = require("./fn/discord");
 const appConfig = require("./config.json");
 
 module.exports = function (profile) {
@@ -41,12 +47,16 @@ module.exports = function (profile) {
   const verboseTrafficLogs = verboseMode === "all";
   let currentVersionIndex = 0;
   console.log(
-    `🤖 Iniciando Mineflayer en modo offline/no premium con usuario ${username} en versión ${version}. Servidor: ${ip}:${port} | velocityCompatMode=${velocityCompatMode}`
+    `🤖 [Mineflayer] Started Mineflayer in offline/no premium mode with user ${username} in version ${version}. Server: ${ip}:${port} | velocityCompatMode=${velocityCompatMode}`,
   );
   let bot = null;
 
   function getActiveVersion() {
-    return versionCandidates[currentVersionIndex] || String(version || "").trim() || "1.20.1";
+    return (
+      versionCandidates[currentVersionIndex] ||
+      String(version || "").trim() ||
+      "1.20.1"
+    );
   }
 
   function buildBotOptions() {
@@ -124,14 +134,18 @@ module.exports = function (profile) {
   }
 
   console.log(
-    `[DiscordRPC] bootstrap desde minelight: verboseMode=${verboseMode} debugLifecycle=${DEBUG_LIFECYCLE ? "1" : "0"} clientIdLen=${discordClientId.length}`
+    `[DiscordRPC] bootstrap from minelight: verboseMode=${verboseMode} debugLifecycle=${DEBUG_LIFECYCLE ? "1" : "0"} clientIdLen=${discordClientId.length}`,
   );
   initDiscordPresence({
     clientId: discordClientId,
     verboseMode,
     debugLifecycle: DEBUG_LIFECYCLE,
   });
-  updateDiscordPresence({ serverIp: "Esperando servidor...", version: getActiveVersion(), username });
+  updateDiscordPresence({
+    serverIp: "Waiting for server...",
+    version: getActiveVersion(),
+    username,
+  });
 
   function isIgnored(message) {
     const text = String(message ?? "");
@@ -164,7 +178,9 @@ module.exports = function (profile) {
   }
 
   function normalizeChatKey(text) {
-    return String(text ?? "").trim().toLowerCase();
+    return String(text ?? "")
+      .trim()
+      .toLowerCase();
   }
 
   function prunePendingOutboundEchoes() {
@@ -224,7 +240,7 @@ module.exports = function (profile) {
         type: "chatHistory",
         sessionId,
         history: chatHistory,
-      })
+      }),
     );
   }
 
@@ -278,13 +294,17 @@ module.exports = function (profile) {
   function computeReconnectDelay(attempt) {
     const base = Math.max(250, reconnectDelayMs);
     const exp = Math.min(Math.max(1, attempt), 12) - 1;
-    const capped = Math.min(reconnectBackoffMaxMs, Math.round(base * (2 ** exp)));
-    const jitter = Math.round(capped * reconnectJitterRatio * (Math.random() * 2 - 1));
+    const capped = Math.min(reconnectBackoffMaxMs, Math.round(base * 2 ** exp));
+    const jitter = Math.round(
+      capped * reconnectJitterRatio * (Math.random() * 2 - 1),
+    );
     return Math.max(200, capped + jitter);
   }
 
   function markAuthCommandIfNeeded(text) {
-    const line = String(text || "").trim().toLowerCase();
+    const line = String(text || "")
+      .trim()
+      .toLowerCase();
     if (!line) return;
     if (line.startsWith("/login")) {
       lastAuthCommandAt = Date.now();
@@ -292,14 +312,27 @@ module.exports = function (profile) {
     }
   }
 
-  function classifyDisconnectEvent({ eventType, reasonText, loggedIn, wasReady }) {
+  function classifyDisconnectEvent({
+    eventType,
+    reasonText,
+    loggedIn,
+    wasReady,
+  }) {
     const now = Date.now();
     const normalizedReason = String(reasonText || "").toLowerCase();
     const sinceSpawn = spawnAt > 0 ? now - spawnAt : Number.POSITIVE_INFINITY;
-    const sinceAuth = lastAuthCommandAt > 0 ? now - lastAuthCommandAt : Number.POSITIVE_INFINITY;
+    const sinceAuth =
+      lastAuthCommandAt > 0
+        ? now - lastAuthCommandAt
+        : Number.POSITIVE_INFINITY;
 
     if (!wasReady || loggedIn === false) {
-      return { reasonType: "pre_spawn_transient", phase: "pre-spawn", sinceSpawn, sinceAuth };
+      return {
+        reasonType: "pre_spawn_transient",
+        phase: "pre-spawn",
+        sinceSpawn,
+        sinceAuth,
+      };
     }
 
     const looksProxyInternal =
@@ -307,8 +340,17 @@ module.exports = function (profile) {
       normalizedReason.includes("proxy") ||
       normalizedReason.includes("velocity");
 
-    if (sinceAuth <= authRecoveryWindowMs || sinceSpawn <= authRecoveryWindowMs || looksProxyInternal) {
-      return { reasonType: "post_auth_transient", phase: "post-auth", sinceSpawn, sinceAuth };
+    if (
+      sinceAuth <= authRecoveryWindowMs ||
+      sinceSpawn <= authRecoveryWindowMs ||
+      looksProxyInternal
+    ) {
+      return {
+        reasonType: "post_auth_transient",
+        phase: "post-auth",
+        sinceSpawn,
+        sinceAuth,
+      };
     }
 
     return { reasonType: "fatal", phase: eventType, sinceSpawn, sinceAuth };
@@ -329,7 +371,12 @@ module.exports = function (profile) {
     });
   }
 
-  function scheduleAdaptiveReconnect({ reasonType, phase, reasonText, resetVersionCycle = false }) {
+  function scheduleAdaptiveReconnect({
+    reasonType,
+    phase,
+    reasonText,
+    resetVersionCycle = false,
+  }) {
     if (isShuttingDown()) {
       return true;
     }
@@ -338,16 +385,22 @@ module.exports = function (profile) {
     }
 
     if (reconnectInProgress) {
-      debugLog("reconnect:ignored", `already in progress reasonType=${reasonType}`);
+      debugLog(
+        "reconnect:ignored",
+        `already in progress reasonType=${reasonType}`,
+      );
       return true;
     }
 
     if (reconnectAttempt >= maxReconnectAttempts) {
-      debugLog("reconnect:exhausted", `reasonType=${reasonType} attempts=${reconnectAttempt}`);
+      debugLog(
+        "reconnect:exhausted",
+        `reasonType=${reasonType} attempts=${reconnectAttempt}`,
+      );
       broadcastSidebarState("offline");
       finishReconnectCycle({
         fatal: true,
-        message: "No se pudo reconectar al proxy tras varios intentos.",
+        message: "Can't connect to proxy after multiple attempts.",
       });
       return true;
     }
@@ -358,7 +411,7 @@ module.exports = function (profile) {
 
     debugLog(
       "reconnect:schedule",
-      `reasonType=${reasonType} phase=${phase} attempt=${reconnectAttempt}/${maxReconnectAttempts} delayMs=${delayMs} uptimeSinceSpawn=${uptimeSinceSpawn}`
+      `reasonType=${reasonType} phase=${phase} attempt=${reconnectAttempt}/${maxReconnectAttempts} delayMs=${delayMs} uptimeSinceSpawn=${uptimeSinceSpawn}`,
     );
 
     requestLocalRestart({
@@ -373,20 +426,34 @@ module.exports = function (profile) {
     return true;
   }
 
-  function handleDisconnectEvent(eventType, { reasonText = "", loggedIn = null } = {}) {
+  function handleDisconnectEvent(
+    eventType,
+    { reasonText = "", loggedIn = null } = {},
+  ) {
     if (isShuttingDown()) {
       return true;
     }
     const wasReady = botReady;
-    const classification = classifyDisconnectEvent({ eventType, reasonText, loggedIn, wasReady });
+    const classification = classifyDisconnectEvent({
+      eventType,
+      reasonText,
+      loggedIn,
+      wasReady,
+    });
     const details = `reasonType=${classification.reasonType} phase=${classification.phase} sinceSpawn=${classification.sinceSpawn} sinceAuth=${classification.sinceAuth}`;
     debugLog(`disconnect:${eventType}`, details);
 
-    if (classification.reasonType === "pre_spawn_transient" && scheduleVersionRetry(`${eventType}-before-spawn`)) {
+    if (
+      classification.reasonType === "pre_spawn_transient" &&
+      scheduleVersionRetry(`${eventType}-before-spawn`)
+    ) {
       return true;
     }
 
-    if (classification.reasonType === "pre_spawn_transient" || classification.reasonType === "post_auth_transient") {
+    if (
+      classification.reasonType === "pre_spawn_transient" ||
+      classification.reasonType === "post_auth_transient"
+    ) {
       return scheduleAdaptiveReconnect({
         reasonType: classification.reasonType,
         phase: classification.phase,
@@ -402,10 +469,16 @@ module.exports = function (profile) {
     if (isShuttingDown()) {
       return bot;
     }
-    debugLog("bot:create", `host=${ip} version=${getActiveVersion()} ready=${botReady} attempt=${currentVersionIndex + 1}/${versionCandidates.length}`);
+    debugLog(
+      "bot:create",
+      `host=${ip} version=${getActiveVersion()} ready=${botReady} attempt=${currentVersionIndex + 1}/${versionCandidates.length}`,
+    );
     if (bot) {
       try {
-        debugLog("bot:dispose", "removing listeners and ending previous instance");
+        debugLog(
+          "bot:dispose",
+          "removing listeners and ending previous instance",
+        );
         bot.removeAllListeners();
         bot.end("reconnect");
       } catch {
@@ -457,7 +530,7 @@ module.exports = function (profile) {
     broadcast({
       type: "reconnectState",
       busy: true,
-      message: "Reintentando conexión con proxy...",
+      message: "Reconnecting to proxy...",
       attempt,
       maxAttempts,
       reasonType,
@@ -476,9 +549,9 @@ module.exports = function (profile) {
         broadcast({
           type: "reconnectState",
           busy: false,
-          message: "No se pudo reiniciar el bot.",
+          message: "Can't reconnect to proxy.",
         });
-        console.log("❌ Error al recrear el bot:", error);
+        console.log("❌ Error recreating the bot:", error);
       }
     }, delayMs);
   }
@@ -493,7 +566,10 @@ module.exports = function (profile) {
     }
 
     currentVersionIndex += 1;
-    debugLog("bot:retry-version", `next=${getActiveVersion()} reason=${reason}`);
+    debugLog(
+      "bot:retry-version",
+      `next=${getActiveVersion()} reason=${reason}`,
+    );
     requestLocalRestart({ resetVersionCycle: false });
     return true;
   }
@@ -539,7 +615,10 @@ module.exports = function (profile) {
 
   function handleMenuReadError(error, context = "menu") {
     if (isPartialReadError(error)) {
-      debugLog(`${context}:partial-read`, "ignoring truncated packet while menu is changing");
+      debugLog(
+        `${context}:partial-read`,
+        "ignoring truncated packet while menu is changing",
+      );
       return true;
     }
 
@@ -570,7 +649,12 @@ module.exports = function (profile) {
     }
 
     if (verboseTrafficLogs) {
-      const prefix = source === "player" ? "[CHAT]" : source === "system" ? "[SYSTEM]" : "[SERVER]";
+      const prefix =
+        source === "player"
+          ? "[CHAT]"
+          : source === "system"
+            ? "[SYSTEM]"
+            : "[SERVER]";
       console.log(`${prefix} ${line}`);
     }
     pushChatHistory({ text: line, source });
@@ -597,7 +681,7 @@ module.exports = function (profile) {
     try {
       bot.chat(line);
     } catch (error) {
-      console.log("❌ Error enviando chat al bot:", error);
+      console.log("❌ Error sending chat to bot:", error);
     }
   }
 
@@ -611,7 +695,7 @@ module.exports = function (profile) {
       try {
         bot.chat(nextMessage);
       } catch (error) {
-        console.log("❌ Error enviando chat pendiente al bot:", error);
+        console.log("❌ Error sending pending chat to bot:", error);
       }
     }
   }
@@ -622,22 +706,43 @@ module.exports = function (profile) {
     }
 
     const simplifiedNbt = simplifyNbt(item.nbt);
-    const displayTag = simplifiedNbt?.display ?? item?.nbt?.value?.display?.value ?? null;
+    const displayTag =
+      simplifiedNbt?.display ?? item?.nbt?.value?.display?.value ?? null;
     const modernDisplay = extractModernDisplayData(item);
-    const rawName = modernDisplay.customName || displayTag?.Name || item.customName || item.displayName || item.name || "Elemento";
-    const rawLore = modernDisplay.lore.length > 0 ? modernDisplay.lore : displayTag?.Lore || item.customLore || null;
+    const rawName =
+      modernDisplay.customName ||
+      displayTag?.Name ||
+      item.customName ||
+      item.displayName ||
+      item.name ||
+      "Elemento";
+    const rawLore =
+      modernDisplay.lore.length > 0
+        ? modernDisplay.lore
+        : displayTag?.Lore || item.customLore || null;
 
     const customName = decodeMinecraftText(rawName).trim();
-    const lore = Array.isArray(rawLore) && rawLore.length > 0 ? normalizeLore(rawLore) : modernDisplay.lore;
-    const baseName = decodeMinecraftText(item.name || "unknown").trim() || "unknown";
-    const displayName = customName || decodeMinecraftText(item.displayName || baseName).trim() || baseName;
+    const lore =
+      Array.isArray(rawLore) && rawLore.length > 0
+        ? normalizeLore(rawLore)
+        : modernDisplay.lore;
+    const baseName =
+      decodeMinecraftText(item.name || "unknown").trim() || "unknown";
+    const displayName =
+      customName ||
+      decodeMinecraftText(item.displayName || baseName).trim() ||
+      baseName;
     const searchText = [
       displayName,
       baseName,
       customName,
       ...lore,
       item.customName,
-      ...(Array.isArray(item.customLore) ? item.customLore : item.customLore ? [item.customLore] : []),
+      ...(Array.isArray(item.customLore)
+        ? item.customLore
+        : item.customLore
+          ? [item.customLore]
+          : []),
     ]
       .filter(Boolean)
       .map((entry) => decodeMinecraftText(entry).toLowerCase())
@@ -648,7 +753,9 @@ module.exports = function (profile) {
       name: baseName,
       customName: sanitizeVisibleText(customName) || null,
       displayName: sanitizeVisibleText(displayName),
-      lore: Array.isArray(lore) ? lore.map(sanitizeVisibleText).filter(Boolean) : [],
+      lore: Array.isArray(lore)
+        ? lore.map(sanitizeVisibleText).filter(Boolean)
+        : [],
       searchText: sanitizeVisibleText(searchText),
       count: item.count || 1,
     };
@@ -664,18 +771,21 @@ module.exports = function (profile) {
       .map((item) => serializeItem(item, item.slot))
       .filter(Boolean);
 
-    const token = tokenOverride || (activeMenu && activeMenu.token) || ("personal-inventory-" + Date.now());
+    const token =
+      tokenOverride ||
+      (activeMenu && activeMenu.token) ||
+      "personal-inventory-" + Date.now();
     ws.send(
       JSON.stringify({
         type: "menu",
         menu: {
           token,
           windowId: "inventory",
-          title: "Inventario del Bot",
+          title: "Bot Inventory",
           slotCount: 36,
           slots,
         },
-      })
+      }),
     );
 
     personalInventoryTokens.set(ws, token);
@@ -695,8 +805,8 @@ module.exports = function (profile) {
 
       slots = Array.isArray(rawSlots)
         ? rawSlots
-          .map((item, slot) => serializeItem(item, slot))
-          .filter(Boolean)
+            .map((item, slot) => serializeItem(item, slot))
+            .filter(Boolean)
         : [];
     } catch (error) {
       if (handleMenuReadError(error, "menu:serialize")) {
@@ -708,7 +818,7 @@ module.exports = function (profile) {
     return {
       token,
       windowId: window.id,
-      title: sanitizeVisibleText(decodeMinecraftText(rawTitle || "Menú")),
+      title: sanitizeVisibleText(decodeMinecraftText(rawTitle || "Menu")),
       slotCount: Array.isArray(rawSlots) ? rawSlots.length : 0,
       slots,
     };
@@ -746,7 +856,10 @@ module.exports = function (profile) {
     return true;
   }
 
-  function retryBroadcastMenu(window, { newToken = false, attempts = 5, delayMs = 140 } = {}) {
+  function retryBroadcastMenu(
+    window,
+    { newToken = false, attempts = 5, delayMs = 140 } = {},
+  ) {
     const targetToken = newToken ? activeMenuToken + 1 : activeMenuToken;
     let remainingAttempts = attempts;
 
@@ -824,7 +937,7 @@ module.exports = function (profile) {
     broadcast({
       type: "menuBusy",
       busy: locked,
-      message: message || (locked ? "Cambiando de servidor..." : ""),
+      message: message || (locked ? "Changing server..." : ""),
     });
 
     if (locked) {
@@ -854,10 +967,10 @@ module.exports = function (profile) {
   const wsConfig = createWSServerConfig();
   wss = new WebSocket.Server({ port: wsConfig.port });
   wss.on("listening", () => {
-    console.log("🔌 WebSocket local del panel en ws://127.0.0.1:3000");
+    console.log("🔌 WebSocket local on ws://127.0.0.1:3000");
   });
   wss.on("connection", (ws) => {
-    console.log("✅ Cliente web conectado");
+    console.log("✅ Client connected");
     webClients.add(ws);
     // Enviar info inicial
     ws.send(
@@ -873,7 +986,7 @@ module.exports = function (profile) {
         botStatus,
         health: currentHealth,
         food: currentFood,
-      })
+      }),
     );
 
     if (activeMenu) {
@@ -926,8 +1039,7 @@ module.exports = function (profile) {
           const mouseButton = clickType === "right" ? 1 : 0;
           const personalInventoryToken = personalInventoryTokens.get(ws);
           const isPersonalInventoryAction = Boolean(
-            personalInventoryToken &&
-            data.token === personalInventoryToken
+            personalInventoryToken && data.token === personalInventoryToken,
           );
 
           if (isPersonalInventoryAction) {
@@ -937,26 +1049,33 @@ module.exports = function (profile) {
 
             try {
               if (clickType === "use") {
-                const item = bot.inventory.slots[slot] || bot.inventory.items().find(i => i.slot === slot);
+                const item =
+                  bot.inventory.slots[slot] ||
+                  bot.inventory.items().find((i) => i.slot === slot);
                 if (item) {
                   const armorDestination = getArmorDestination(item.name);
 
                   if (armorDestination) {
-                    bot.unequip(armorDestination)
+                    bot
+                      .unequip(armorDestination)
                       .catch(() => {
                         // Puede estar vacío; ignorar.
                       })
                       .finally(() => {
                         bot.equip(item, armorDestination).catch((err) => {
-                          console.log("❌ Error equipando armadura:", err);
+                          console.log("❌ Error equipping armor:", err);
                         });
                       });
-                    setTimeout(() => sendInventorySnapshot(ws, personalInventoryToken), 220);
+                    setTimeout(
+                      () => sendInventorySnapshot(ws, personalInventoryToken),
+                      220,
+                    );
                     return;
                   }
 
                   if (isLikelyFood(item.name)) {
-                    bot.equip(item, "hand")
+                    bot
+                      .equip(item, "hand")
                       .then(async () => {
                         if (typeof bot.consume === "function") {
                           await bot.consume();
@@ -965,20 +1084,27 @@ module.exports = function (profile) {
                         }
                       })
                       .catch((err) => {
-                        console.log("❌ Error consumiendo comida:", err);
+                        console.log("❌ Error consuming food:", err);
                       });
-                    setTimeout(() => sendInventorySnapshot(ws, personalInventoryToken), 350);
+                    setTimeout(
+                      () => sendInventorySnapshot(ws, personalInventoryToken),
+                      350,
+                    );
                     return;
                   }
 
-                  bot.equip(item, "hand")
+                  bot
+                    .equip(item, "hand")
                     .then(() => {
                       bot.activateItem(false);
                     })
                     .catch((err) => {
-                      console.log("❌ Error equipando ítem:", err);
+                      console.log("❌ Error equipping item:", err);
                     });
-                  setTimeout(() => sendInventorySnapshot(ws, personalInventoryToken), 220);
+                  setTimeout(
+                    () => sendInventorySnapshot(ws, personalInventoryToken),
+                    220,
+                  );
                 }
                 return;
               }
@@ -986,9 +1112,12 @@ module.exports = function (profile) {
               bot.clickWindow(slot, mouseButton, 0);
 
               // Enviar el inventario actualizado al cliente
-              setTimeout(() => sendInventorySnapshot(ws, personalInventoryToken), 200);
+              setTimeout(
+                () => sendInventorySnapshot(ws, personalInventoryToken),
+                200,
+              );
             } catch (error) {
-              console.log("❌ Error al hacer click en el inventario personal:", error);
+              console.log("❌ Error clicking inventory:", error);
             }
             return;
           }
@@ -1006,7 +1135,7 @@ module.exports = function (profile) {
           }
 
           menuTransitionLocked = true;
-          setMenuTransitionLocked(true, "Cambiando de servidor...");
+          setMenuTransitionLocked(true, "Changing server...");
           setTimeout(() => {
             try {
               if (bot.currentWindow) {
@@ -1018,7 +1147,7 @@ module.exports = function (profile) {
             } catch (error) {
               menuTransitionLocked = false;
               setMenuTransitionLocked(false);
-              console.log("❌ Error al hacer click en el menú:", error);
+              console.log("❌ Error clicking menu:", error);
             }
           }, 180);
           return;
@@ -1036,7 +1165,7 @@ module.exports = function (profile) {
       personalInventoryTokens.delete(ws);
       clearInterval(interval);
       wsIntervals.delete(interval);
-      console.log("❌ Cliente web desconectado");
+      console.log("❌ Client disconnected");
     });
   });
 
@@ -1052,20 +1181,28 @@ module.exports = function (profile) {
   }
 
   function registerBotEvents(currentBot) {
-    if (currentBot._client && !currentBot._client.__mcBetaErrorHandlerAttached) {
+    if (
+      currentBot._client &&
+      !currentBot._client.__mcBetaErrorHandlerAttached
+    ) {
       currentBot._client.__mcBetaErrorHandlerAttached = true;
       currentBot._client.on("error", (err) => {
         if (handleMenuReadError(err, "client:error")) {
           return;
         }
-        debugLog("client:error", err && err.message ? err.message : String(err));
+        debugLog(
+          "client:error",
+          err && err.message ? err.message : String(err),
+        );
       });
     }
 
     // JOIN A SERVER MODE
     currentBot.on("windowOpen", (window) => {
-      const parsedTitle = sanitizeVisibleText(decodeMinecraftText(window.title));
-      console.log(`📂 Menú abierto: ${parsedTitle || "[sin titulo]"}`);
+      const parsedTitle = sanitizeVisibleText(
+        decodeMinecraftText(window.title),
+      );
+      console.log(`📂 Menu opened: ${parsedTitle || "[no title]"}`);
       menuTransitionLocked = false;
       setMenuTransitionLocked(false);
       attachWindowRealtime(window);
@@ -1073,7 +1210,7 @@ module.exports = function (profile) {
     });
 
     currentBot.on("windowClose", () => {
-      console.log("📂 Menú cerrado");
+      console.log("📂 Menu closed");
       menuTransitionLocked = false;
       setMenuTransitionLocked(false);
       detachWindowRealtime();
@@ -1095,7 +1232,11 @@ module.exports = function (profile) {
       clearStableSessionTimer();
       menuTransitionLocked = false;
       setMenuTransitionLocked(false);
-      updateDiscordPresence({ serverIp: ip, version: getActiveVersion(), username: currentBot.username || username });
+      updateDiscordPresence({
+        serverIp: ip,
+        version: getActiveVersion(),
+        username: currentBot.username || username,
+      });
       currentBot.settings.chat = "enabled";
       refreshVitalsFromBot();
       broadcastSidebarState("online");
@@ -1108,8 +1249,8 @@ module.exports = function (profile) {
         maxAttempts: maxReconnectAttempts,
         reasonType: "recovered",
       });
-      console.log(`✅ Conectado como ${currentBot.username}`);
-      emitChatLine(`✅ Conectado como ${currentBot.username}`, "system");
+      console.log(`✅ Logued as ${currentBot.username}`);
+      emitChatLine(`✅ Logued as ${currentBot.username}`, "system");
       flushPendingOutboundMessages();
       setTimeout(() => {
         //currentBot.chat("/modalidades");
@@ -1122,7 +1263,7 @@ module.exports = function (profile) {
     });
 
     currentBot.once("login", () => {
-      console.log("🔐 Login completado, esperando spawn...");
+      console.log("🔐 Login completed, waiting for spawn...");
     });
 
     currentBot.on("health", () => {
@@ -1163,7 +1304,7 @@ module.exports = function (profile) {
       const decodedReason = decodeMinecraftText(reason);
       debugLog(
         "bot:kicked",
-        `loggedIn=${loggedIn} reason=${decodedReason || "unknown"}`
+        `loggedIn=${loggedIn} reason=${decodedReason || "unknown"}`,
       );
       menuTransitionLocked = false;
       setMenuTransitionLocked(false);
@@ -1173,19 +1314,24 @@ module.exports = function (profile) {
       currentHealth = null;
       currentFood = null;
       clearStableSessionTimer();
-      if (handleDisconnectEvent("kicked", { reasonText: decodedReason, loggedIn })) {
+      if (
+        handleDisconnectEvent("kicked", { reasonText: decodedReason, loggedIn })
+      ) {
         return;
       }
       reconnectInProgress = false;
       broadcastSidebarState("offline");
-      finishReconnectCycle({ fatal: true, message: "Conexión cerrada por el servidor." });
+      finishReconnectCycle({
+        fatal: true,
+        message: "Connection closed by the server.",
+      });
       console.log(
         "❌ Kicked:",
         sanitizeVisibleText(decodedReason),
         sanitizeVisibleText(JSON.stringify(reason)),
         "(loggedIn:",
         loggedIn,
-        ")"
+        ")",
       );
     });
 
@@ -1196,12 +1342,16 @@ module.exports = function (profile) {
       currentHealth = null;
       currentFood = null;
       clearStableSessionTimer();
-      if (handleDisconnectEvent("disconnect", { reasonText: String(reason || "unknown") })) {
+      if (
+        handleDisconnectEvent("disconnect", {
+          reasonText: String(reason || "unknown"),
+        })
+      ) {
         return;
       }
       reconnectInProgress = false;
       broadcastSidebarState("offline");
-      finishReconnectCycle({ fatal: true, message: "Sesión desconectada." });
+      finishReconnectCycle({ fatal: true, message: "Session disconnected." });
       console.log(`🔌 Session closed: ${sanitizeVisibleText(reason)}`);
     });
 
@@ -1225,7 +1375,7 @@ module.exports = function (profile) {
       }
       reconnectInProgress = false;
       broadcastSidebarState("offline");
-      finishReconnectCycle({ fatal: true, message: "Conexión finalizada." });
+      finishReconnectCycle({ fatal: true, message: "Session disconnected." });
       console.log("🔌 Disconnected from the server");
     });
 
@@ -1234,7 +1384,7 @@ module.exports = function (profile) {
       try {
         // procesamiento de chunk si lo necesitas
       } catch (err) {
-        console.log("❌ Error cargando chunk, ignorando...");
+        console.log("❌ Error loading chunk, ignoring...");
       }
     });
 
@@ -1285,7 +1435,9 @@ module.exports = function (profile) {
     }
     wsIntervals.clear();
     for (const ws of webClients) {
-      try { ws.close(); } catch { }
+      try {
+        ws.close();
+      } catch {}
     }
     webClients.clear();
     personalInventoryTokens.clear();
@@ -1304,7 +1456,9 @@ module.exports = function (profile) {
     }
 
     if (rl) {
-      try { rl.close(); } catch { }
+      try {
+        rl.close();
+      } catch {}
       rl = null;
     }
 
@@ -1316,7 +1470,7 @@ module.exports = function (profile) {
       try {
         bot.removeAllListeners();
         bot.end("session_closed_by_user");
-      } catch { }
+      } catch {}
       bot = null;
     }
 

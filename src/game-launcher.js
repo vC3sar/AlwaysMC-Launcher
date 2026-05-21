@@ -24,29 +24,47 @@ const {
 
 function httpsGetBuffer(url, timeoutMs = 30000) {
   return new Promise((resolve, reject) => {
-    const req = https.get(url, { timeout: timeoutMs, headers: { "User-Agent": "MC-BETA/1.0" } }, (res) => {
-      if (res.statusCode >= 300 && res.statusCode < 400 && res.headers.location) {
-        res.resume();
-        return resolve(httpsGetBuffer(res.headers.location, timeoutMs));
-      }
-      if (res.statusCode !== 200) {
+    const req = https.get(
+      url,
+      { timeout: timeoutMs, headers: { "User-Agent": "MC-BETA/1.0" } },
+      (res) => {
+        if (
+          res.statusCode >= 300 &&
+          res.statusCode < 400 &&
+          res.headers.location
+        ) {
+          res.resume();
+          return resolve(httpsGetBuffer(res.headers.location, timeoutMs));
+        }
+        if (res.statusCode !== 200) {
+          const chunks = [];
+          res.on("data", (d) => chunks.push(d));
+          res.on("end", () =>
+            reject(
+              new Error(
+                `HTTP ${res.statusCode} for ${url}: ${Buffer.concat(chunks).toString("utf8")}`,
+              ),
+            ),
+          );
+          return;
+        }
         const chunks = [];
         res.on("data", (d) => chunks.push(d));
-        res.on("end", () => reject(new Error(`HTTP ${res.statusCode} for ${url}: ${Buffer.concat(chunks).toString("utf8")}`)));
-        return;
-      }
-      const chunks = [];
-      res.on("data", (d) => chunks.push(d));
-      res.on("end", () => resolve(Buffer.concat(chunks)));
-    });
+        res.on("end", () => resolve(Buffer.concat(chunks)));
+      },
+    );
     req.on("error", reject);
     req.on("timeout", () => req.destroy(new Error(`Timeout fetching ${url}`)));
   });
 }
 
-const fetchJson = async (url, timeoutMs = 30000) => JSON.parse((await httpsGetBuffer(url, timeoutMs)).toString("utf8"));
+const fetchJson = async (url, timeoutMs = 30000) =>
+  JSON.parse((await httpsGetBuffer(url, timeoutMs)).toString("utf8"));
 
-async function httpsRequestJson(url, { method = "GET", headers = {}, body = null, timeoutMs = 30000 } = {}) {
+async function httpsRequestJson(
+  url,
+  { method = "GET", headers = {}, body = null, timeoutMs = 30000 } = {},
+) {
   return new Promise((resolve, reject) => {
     const parsed = new URL(url);
     const req = https.request(
@@ -65,7 +83,10 @@ async function httpsRequestJson(url, { method = "GET", headers = {}, body = null
         res.on("end", () => {
           try {
             const raw = Buffer.concat(chunks).toString("utf8");
-            if (res.statusCode < 200 || res.statusCode >= 300) return reject(new Error(`HTTP ${res.statusCode} for ${url}: ${raw}`));
+            if (res.statusCode < 200 || res.statusCode >= 300)
+              return reject(
+                new Error(`HTTP ${res.statusCode} for ${url}: ${raw}`),
+              );
             return resolve(raw ? JSON.parse(raw) : {});
           } catch (error) {
             return reject(error);
@@ -82,82 +103,121 @@ async function httpsRequestJson(url, { method = "GET", headers = {}, body = null
 
 const ensureDir = (dir) => fsp.mkdir(dir, { recursive: true });
 
-const sha1Hex = (buffer) => crypto.createHash("sha1").update(buffer).digest("hex");
+const sha1Hex = (buffer) =>
+  crypto.createHash("sha1").update(buffer).digest("hex");
 
-const fileExists = async (filePath) => fsp.access(filePath, fs.constants.F_OK).then(() => true).catch(() => false);
+const fileExists = async (filePath) =>
+  fsp
+    .access(filePath, fs.constants.F_OK)
+    .then(() => true)
+    .catch(() => false);
 
 async function verifyFile(filePath, expectedSha1, expectedSize) {
   if (!(await fileExists(filePath))) return false;
   const stat = await fsp.stat(filePath);
-  if (Number.isFinite(expectedSize) && expectedSize > -1 && stat.size !== expectedSize) return false;
+  if (
+    Number.isFinite(expectedSize) &&
+    expectedSize > -1 &&
+    stat.size !== expectedSize
+  )
+    return false;
   if (!expectedSha1) return true;
   const data = await fsp.readFile(filePath);
   return sha1Hex(data) === String(expectedSha1).toLowerCase();
 }
 
-async function downloadFileWithVerify(url, destPath, { sha1 = "", size = -1, retries = 3, onProgress = null, signal = null } = {}) {
+async function downloadFileWithVerify(
+  url,
+  destPath,
+  { sha1 = "", size = -1, retries = 3, onProgress = null, signal = null } = {},
+) {
   await ensureDir(path.dirname(destPath));
 
   if (await verifyFile(destPath, sha1, size)) {
-    if (typeof onProgress === "function") onProgress({ skipped: true, bytes: size > -1 ? size : 0 });
+    if (typeof onProgress === "function")
+      onProgress({ skipped: true, bytes: size > -1 ? size : 0 });
     return;
   }
 
   let lastError = null;
   for (let attempt = 1; attempt <= retries; attempt += 1) {
-    if (signal && signal.aborted) throw new Error("Instalación cancelada.");
+    if (signal && signal.aborted) throw new Error("Installation cancelled.");
     try {
       await new Promise((resolve, reject) => {
-        const req = https.get(url, { headers: { "User-Agent": "MC-BETA/1.0" } }, (res) => {
-          if (res.statusCode >= 300 && res.statusCode < 400 && res.headers.location) {
-            res.resume();
-            downloadFileWithVerify(res.headers.location, destPath, { sha1, size, retries: 1, onProgress, signal }).then(resolve).catch(reject);
-            return;
-          }
-          if (res.statusCode !== 200) {
-            res.resume();
-            reject(new Error(`HTTP ${res.statusCode} for ${url}`));
-            return;
-          }
+        const req = https.get(
+          url,
+          { headers: { "User-Agent": "MC-BETA/1.0" } },
+          (res) => {
+            if (
+              res.statusCode >= 300 &&
+              res.statusCode < 400 &&
+              res.headers.location
+            ) {
+              res.resume();
+              downloadFileWithVerify(res.headers.location, destPath, {
+                sha1,
+                size,
+                retries: 1,
+                onProgress,
+                signal,
+              })
+                .then(resolve)
+                .catch(reject);
+              return;
+            }
+            if (res.statusCode !== 200) {
+              res.resume();
+              reject(new Error(`HTTP ${res.statusCode} for ${url}`));
+              return;
+            }
 
-          const tmpPath = `${destPath}.part`;
-          const out = fs.createWriteStream(tmpPath);
-          let received = 0;
-          res.on("data", (chunk) => {
-            received += chunk.length;
-            if (typeof onProgress === "function") onProgress({ bytes: chunk.length, totalReceived: received, totalExpected: Number.isFinite(size) && size > -1 ? size : undefined });
-          });
-          res.pipe(out);
-
-          out.on("finish", async () => {
-            out.close(async () => {
-              try {
-                if (signal && signal.aborted) {
-                  await fsp.rm(tmpPath, { force: true });
-                  return reject(new Error("Instalación cancelada."));
-                }
-                if (Number.isFinite(size) && size > -1) {
-                  const stat = await fsp.stat(tmpPath);
-                  if (stat.size !== size) throw new Error(`Size mismatch for ${destPath}`);
-                }
-                if (sha1) {
-                  const data = await fsp.readFile(tmpPath);
-                  if (sha1Hex(data) !== String(sha1).toLowerCase()) throw new Error(`SHA1 mismatch for ${destPath}`);
-                }
-                await fsp.rename(tmpPath, destPath);
-                resolve();
-              } catch (err) {
-                await fsp.rm(tmpPath, { force: true }).catch(() => { });
-                reject(err);
-              }
+            const tmpPath = `${destPath}.part`;
+            const out = fs.createWriteStream(tmpPath);
+            let received = 0;
+            res.on("data", (chunk) => {
+              received += chunk.length;
+              if (typeof onProgress === "function")
+                onProgress({
+                  bytes: chunk.length,
+                  totalReceived: received,
+                  totalExpected:
+                    Number.isFinite(size) && size > -1 ? size : undefined,
+                });
             });
-          });
+            res.pipe(out);
 
-          out.on("error", async (err) => {
-            await fsp.rm(tmpPath, { force: true }).catch(() => { });
-            reject(err);
-          });
-        });
+            out.on("finish", async () => {
+              out.close(async () => {
+                try {
+                  if (signal && signal.aborted) {
+                    await fsp.rm(tmpPath, { force: true });
+                    return reject(new Error("Instalación cancelada."));
+                  }
+                  if (Number.isFinite(size) && size > -1) {
+                    const stat = await fsp.stat(tmpPath);
+                    if (stat.size !== size)
+                      throw new Error(`Size mismatch for ${destPath}`);
+                  }
+                  if (sha1) {
+                    const data = await fsp.readFile(tmpPath);
+                    if (sha1Hex(data) !== String(sha1).toLowerCase())
+                      throw new Error(`SHA1 mismatch for ${destPath}`);
+                  }
+                  await fsp.rename(tmpPath, destPath);
+                  resolve();
+                } catch (err) {
+                  await fsp.rm(tmpPath, { force: true }).catch(() => {});
+                  reject(err);
+                }
+              });
+            });
+
+            out.on("error", async (err) => {
+              await fsp.rm(tmpPath, { force: true }).catch(() => {});
+              reject(err);
+            });
+          },
+        );
         req.on("error", reject);
       });
       return;
@@ -174,16 +234,24 @@ function applyRuleSet(rules, osName = "windows", featureFlags = null) {
   let allowed = false;
   for (const rule of rules) {
     const action = rule && rule.action === "disallow" ? "disallow" : "allow";
-    const osRule = rule && rule.os ? String(rule.os.name || "").toLowerCase() : "";
+    const osRule =
+      rule && rule.os ? String(rule.os.name || "").toLowerCase() : "";
     const matchesOs = !osRule || osRule === osName;
     if (!matchesOs) continue;
 
-    const featuresRule = rule && rule.features && typeof rule.features === "object" ? rule.features : null;
+    const featuresRule =
+      rule && rule.features && typeof rule.features === "object"
+        ? rule.features
+        : null;
     let matchesFeatures = true;
     if (featuresRule) {
-      const flags = featureFlags && typeof featureFlags === "object" ? featureFlags : {};
+      const flags =
+        featureFlags && typeof featureFlags === "object" ? featureFlags : {};
       for (const [key, expected] of Object.entries(featuresRule)) {
-        if (Boolean(flags[key]) !== Boolean(expected)) { matchesFeatures = false; break; }
+        if (Boolean(flags[key]) !== Boolean(expected)) {
+          matchesFeatures = false;
+          break;
+        }
       }
     }
     if (!matchesFeatures) continue;
@@ -206,7 +274,8 @@ function toArtifactPath(name) {
 
 function formatJvmRuleArg(arg, replacements) {
   let output = String(arg);
-  for (const [key, value] of Object.entries(replacements)) output = output.replaceAll(`\${${key}}`, String(value));
+  for (const [key, value] of Object.entries(replacements))
+    output = output.replaceAll(`\${${key}}`, String(value));
   return output;
 }
 
@@ -214,7 +283,9 @@ function parseLaunchArgsString(raw) {
   const input = String(raw || "").trim();
   if (!input) return [];
   const out = [];
-  let token = "", quote = "", escaped = false;
+  let token = "",
+    quote = "",
+    escaped = false;
   for (const ch of input) {
     if (escaped) {
       token += ch;
@@ -225,7 +296,7 @@ function parseLaunchArgsString(raw) {
       escaped = true;
       continue;
     }
-    if ((ch === "\"" || ch === "'")) {
+    if (ch === '"' || ch === "'") {
       if (!quote) {
         quote = ch;
         continue;
@@ -249,7 +320,9 @@ function parseLaunchArgsString(raw) {
 }
 
 function parseLibraryNameParts(name) {
-  const [group = "", artifact = "", version = "", classifier = ""] = String(name || "").split(":");
+  const [group = "", artifact = "", version = "", classifier = ""] = String(
+    name || "",
+  ).split(":");
   return { group, artifact, version, classifier };
 }
 
@@ -258,7 +331,12 @@ function resolveWindowsNativeDownload(lib) {
     return { download: null, reason: "rules_disallow_windows" };
   }
 
-  const archKey = process.arch === "arm64" ? "arm64" : process.arch === "ia32" ? "x86" : "x64";
+  const archKey =
+    process.arch === "arm64"
+      ? "arm64"
+      : process.arch === "ia32"
+        ? "x86"
+        : "x64";
   const classifiers = lib?.downloads?.classifiers;
   const nativePattern = String(lib?.natives?.windows || "").trim();
 
@@ -266,7 +344,12 @@ function resolveWindowsNativeDownload(lib) {
     const candidates = [];
     if (nativePattern) {
       candidates.push(nativePattern);
-      candidates.push(nativePattern.replace("${arch}", archKey === "x64" ? "64" : archKey === "x86" ? "32" : "arm64"));
+      candidates.push(
+        nativePattern.replace(
+          "${arch}",
+          archKey === "x64" ? "64" : archKey === "x86" ? "32" : "arm64",
+        ),
+      );
       candidates.push(nativePattern.replace("${arch}", "64"));
       candidates.push(nativePattern.replace("${arch}", "32"));
       candidates.push(nativePattern.replace("${arch}", "arm64"));
@@ -279,12 +362,19 @@ function resolveWindowsNativeDownload(lib) {
 
     for (const key of candidates) {
       const found = classifiers[key];
-      if (found && found.path) return { download: found, classifier: key, source: "classifiers" };
+      if (found && found.path)
+        return { download: found, classifier: key, source: "classifiers" };
     }
 
-    const fallbackKey = Object.keys(classifiers).find((k) => k.startsWith("natives-windows"));
+    const fallbackKey = Object.keys(classifiers).find((k) =>
+      k.startsWith("natives-windows"),
+    );
     if (fallbackKey && classifiers[fallbackKey]?.path) {
-      return { download: classifiers[fallbackKey], classifier: fallbackKey, source: "classifiers_fallback" };
+      return {
+        download: classifiers[fallbackKey],
+        classifier: fallbackKey,
+        source: "classifiers_fallback",
+      };
     }
   }
 
@@ -293,9 +383,15 @@ function resolveWindowsNativeDownload(lib) {
     const parsed = parseLibraryNameParts(lib.name);
     const c = String(parsed.classifier || "").toLowerCase();
     if (c.startsWith("natives-windows")) {
-      if (c.includes("arm64") && archKey !== "arm64") return { download: null, reason: "arch_mismatch_arm64" };
-      if ((c.includes("x86") || c.endsWith("-32")) && archKey === "x64") return { download: null, reason: "arch_mismatch_x86" };
-      return { download: artifact, classifier: parsed.classifier || "natives-windows", source: "artifact_name" };
+      if (c.includes("arm64") && archKey !== "arm64")
+        return { download: null, reason: "arch_mismatch_arm64" };
+      if ((c.includes("x86") || c.endsWith("-32")) && archKey === "x64")
+        return { download: null, reason: "arch_mismatch_x86" };
+      return {
+        download: artifact,
+        classifier: parsed.classifier || "natives-windows",
+        source: "artifact_name",
+      };
     }
     return { download: null, reason: "artifact_not_windows_native" };
   }
@@ -303,9 +399,14 @@ function resolveWindowsNativeDownload(lib) {
   return { download: null, reason: "no_native_descriptor" };
 }
 
-
 class GameLauncherService {
-  constructor({ appRoot, loadConfig, saveConfig, stopBotSession, onInstallUpdate }) {
+  constructor({
+    appRoot,
+    loadConfig,
+    saveConfig,
+    stopBotSession,
+    onInstallUpdate,
+  }) {
     this.appRoot = appRoot;
     this.loadConfig = loadConfig;
     this.saveConfig = saveConfig;
@@ -330,22 +431,38 @@ class GameLauncherService {
   }
 
   getRuntimeStallThresholdMs() {
-    const raw = Number.parseInt(String((this.loadConfig() || {})?.launcher?.downloads?.runtimeStallThresholdMs || "15000"), 10);
+    const raw = Number.parseInt(
+      String(
+        (this.loadConfig() || {})?.launcher?.downloads
+          ?.runtimeStallThresholdMs || "15000",
+      ),
+      10,
+    );
     return Number.isFinite(raw) && raw >= 5000 ? raw : 15000;
   }
 
   getMinecraftDir() {
-    const customDir = (this.loadConfig() || {})?.launcher?.downloads?.minecraftDir;
+    const customDir = (this.loadConfig() || {})?.launcher?.downloads
+      ?.minecraftDir;
     if (customDir && String(customDir).trim()) return String(customDir).trim();
-    return path.join(process.env.APPDATA || path.join(os.homedir(), "AppData", "Roaming"), ".minecraft");
+    return path.join(
+      process.env.APPDATA || path.join(os.homedir(), "AppData", "Roaming"),
+      ".minecraft",
+    );
   }
 
-  getCatalogCacheFile() { return path.join(this.appRoot, "config", "catalog-cache.json"); }
+  getCatalogCacheFile() {
+    return path.join(this.appRoot, "config", "catalog-cache.json");
+  }
 
   async readCatalogCache() {
     const file = this.getCatalogCacheFile();
     if (!(await fileExists(file))) return null;
-    try { return JSON.parse(await fsp.readFile(file, "utf8")); } catch { return null; }
+    try {
+      return JSON.parse(await fsp.readFile(file, "utf8"));
+    } catch {
+      return null;
+    }
   }
 
   async writeCatalogCache(cache) {
@@ -366,19 +483,26 @@ class GameLauncherService {
   async fetchVanillaCatalog() {
     const manifest = await fetchJson(MC_MANIFEST_URL);
     const versions = Array.isArray(manifest?.versions) ? manifest.versions : [];
-    return versions.map((v) => ({
-      id: String(v.id || ""),
-      type: String(v.type || "release"),
-      releaseTime: v.releaseTime || "",
-      url: v.url || "",
-      source: "vanilla",
-    })).filter((v) => v.id && v.url);
+    return versions
+      .map((v) => ({
+        id: String(v.id || ""),
+        type: String(v.type || "release"),
+        releaseTime: v.releaseTime || "",
+        url: v.url || "",
+        source: "vanilla",
+      }))
+      .filter((v) => v.id && v.url);
   }
 
   async fetchFabricCatalog() {
-    const [games, loaders] = await Promise.all([fetchJson(FABRIC_GAMES_URL), fetchJson(FABRIC_LOADERS_URL)]);
+    const [games, loaders] = await Promise.all([
+      fetchJson(FABRIC_GAMES_URL),
+      fetchJson(FABRIC_LOADERS_URL),
+    ]);
     const recentLoaders = Array.isArray(loaders) ? loaders.slice(0, 12) : [];
-    const releaseGames = Array.isArray(games) ? games.filter((g) => g.stable).slice(0, 25) : [];
+    const releaseGames = Array.isArray(games)
+      ? games.filter((g) => g.stable).slice(0, 25)
+      : [];
     const entries = [];
     for (const game of releaseGames) {
       for (const loader of recentLoaders.slice(0, 4)) {
@@ -399,7 +523,9 @@ class GameLauncherService {
     const promos = await fetchJson(FORGE_PROMOS_URL);
     const promoMap = promos && promos.promos ? promos.promos : {};
     const entries = Object.entries(promoMap)
-      .filter(([key]) => key.endsWith("-latest") || key.endsWith("-recommended"))
+      .filter(
+        ([key]) => key.endsWith("-latest") || key.endsWith("-recommended"),
+      )
       .map(([key, forgeVersion]) => {
         const gameVersion = key.replace(/-(latest|recommended)$/, "");
         return {
@@ -416,11 +542,16 @@ class GameLauncherService {
 
   async getVersionCatalog({ forceRefresh = false } = {}) {
     const cfg = this.loadConfig() || {};
-    const ttlMs = Number.parseInt(cfg?.launcher?.catalogCache?.ttlMs || "21600000", 10) || 21600000;
+    const ttlMs =
+      Number.parseInt(cfg?.launcher?.catalogCache?.ttlMs || "21600000", 10) ||
+      21600000;
     const cache = await this.readCatalogCache();
-    const cacheTime = cache?.generatedAt ? new Date(cache.generatedAt).getTime() : 0;
+    const cacheTime = cache?.generatedAt
+      ? new Date(cache.generatedAt).getTime()
+      : 0;
     const stillFresh = cacheTime > 0 && Date.now() - cacheTime < ttlMs;
-    if (!forceRefresh && cache && stillFresh) return { ok: true, catalog: cache, fromCache: true };
+    if (!forceRefresh && cache && stillFresh)
+      return { ok: true, catalog: cache, fromCache: true };
 
     try {
       const [vanilla, forge, fabric] = await Promise.all([
@@ -432,7 +563,13 @@ class GameLauncherService {
       await this.writeCatalogCache(catalog);
       return { ok: true, catalog, fromCache: false };
     } catch (error) {
-      if (cache) return { ok: true, catalog: cache, fromCache: true, warning: String(error.message || error) };
+      if (cache)
+        return {
+          ok: true,
+          catalog: cache,
+          fromCache: true,
+          warning: String(error.message || error),
+        };
       return { ok: false, error: String(error.message || error) };
     }
   }
@@ -461,18 +598,26 @@ class GameLauncherService {
       if (!fs.existsSync(root)) continue;
       for (const entry of await fsp.readdir(root, { withFileTypes: true })) {
         if (!entry.isDirectory()) continue;
-        add(`${entry.name} javaw`, path.join(root, entry.name, "bin", "javaw.exe"));
-        add(`${entry.name} java`, path.join(root, entry.name, "bin", "java.exe"));
+        add(
+          `${entry.name} javaw`,
+          path.join(root, entry.name, "bin", "javaw.exe"),
+        );
+        add(
+          `${entry.name} java`,
+          path.join(root, entry.name, "bin", "java.exe"),
+        );
       }
     }
 
     const available = [];
-    for (const cand of candidates) if (await fileExists(cand.path)) available.push(cand);
+    for (const cand of candidates)
+      if (await fileExists(cand.path)) available.push(cand);
     return available;
   }
 
   async resolveJavaPath(preferredPath = "") {
-    if (preferredPath && await fileExists(preferredPath)) return preferredPath;
+    if (preferredPath && (await fileExists(preferredPath)))
+      return preferredPath;
     const runtimes = await this.detectJavaRuntimes();
     return runtimes.length > 0 ? runtimes[0].path : "java";
   }
@@ -488,7 +633,11 @@ class GameLauncherService {
     if (preferredPath) push(preferredPath);
     const runtimes = await this.detectJavaRuntimes();
     const recommendedMajor = recommendedJavaMajorForVersion(versionId);
-    const matching = runtimes.filter((r) => detectJavaMajorFromPathOrLabel(`${r.label} ${r.path}`) === recommendedMajor);
+    const matching = runtimes.filter(
+      (r) =>
+        detectJavaMajorFromPathOrLabel(`${r.label} ${r.path}`) ===
+        recommendedMajor,
+    );
     matching.forEach((r) => push(r.path));
     runtimes.forEach((r) => push(r.path));
     push("java");
@@ -507,7 +656,8 @@ class GameLauncherService {
       const folder = path.join(versionsDir, cursor);
       const jsonPath = path.join(folder, `${cursor}.json`);
       if (!(await fileExists(jsonPath))) {
-        if (depth === 0) throw new Error(`No existe metadata de versión: ${cursor}`);
+        if (depth === 0)
+          throw new Error(`Version metadata does not exist: ${cursor}`);
         break;
       }
       const meta = JSON.parse(await fsp.readFile(jsonPath, "utf8"));
@@ -515,7 +665,8 @@ class GameLauncherService {
       cursor = meta.inheritsFrom ? String(meta.inheritsFrom).trim() : "";
       depth += 1;
     }
-    if (chain.length === 0) throw new Error(`No se pudo resolver la versión ${cleanVersion}.`);
+    if (chain.length === 0)
+      throw new Error(`Could not resolve version ${cleanVersion}.`);
 
     const merged = {
       id: cleanVersion,
@@ -532,11 +683,14 @@ class GameLauncherService {
       if (!merged.mainClass && m.mainClass) merged.mainClass = m.mainClass;
       if (!merged.assetIndex && m.assetIndex) merged.assetIndex = m.assetIndex;
       if (!merged.arguments && m.arguments) merged.arguments = m.arguments;
-      if (!merged.minecraftArguments && m.minecraftArguments) merged.minecraftArguments = m.minecraftArguments;
+      if (!merged.minecraftArguments && m.minecraftArguments)
+        merged.minecraftArguments = m.minecraftArguments;
       if (!merged.type && m.type) merged.type = m.type;
       const libs = Array.isArray(m.libraries) ? m.libraries : [];
       for (const lib of libs) {
-        const key = String(lib?.name || lib?.downloads?.artifact?.path || JSON.stringify(lib));
+        const key = String(
+          lib?.name || lib?.downloads?.artifact?.path || JSON.stringify(lib),
+        );
         libMap.set(key, lib);
       }
     }
@@ -568,20 +722,32 @@ class GameLauncherService {
     const job = this.installJobs.get(installId);
     if (!job) return;
     job.status = { ...job.status, ...patch, updatedAt: Date.now() };
-    if (typeof this.onInstallUpdate === "function") this.onInstallUpdate(installId, job.status);
+    if (typeof this.onInstallUpdate === "function")
+      this.onInstallUpdate(installId, job.status);
   }
 
   buildInstallId(source, versionId) {
     return `${source}:${versionId}`;
   }
 
-  async installVersion({ source = "vanilla", versionId = "", authMode = "offline", loaderVersion = "" } = {}) {
+  async installVersion({
+    source = "vanilla",
+    versionId = "",
+    authMode = "offline",
+    loaderVersion = "",
+  } = {}) {
     const cleanSource = String(source || "vanilla").toLowerCase();
     const cleanVersion = String(versionId || "").trim();
-    if (!cleanVersion) return { ok: false, error: "Version requerida." };
+    if (!cleanVersion) return { ok: false, error: "Version required." };
     const installId = this.buildInstallId(cleanSource, cleanVersion);
-    if (this.installJobs.has(installId) && this.installJobs.get(installId).status.busy) {
-      return { ok: false, error: "Ya hay una instalación en progreso para esa versión." };
+    if (
+      this.installJobs.has(installId) &&
+      this.installJobs.get(installId).status.busy
+    ) {
+      return {
+        ok: false,
+        error: "An installation is already in progress for that version.",
+      };
     }
 
     const controller = new AbortController();
@@ -595,7 +761,7 @@ class GameLauncherService {
         busy: true,
         phase: "queued",
         progress: 0,
-        message: "Preparando instalación...",
+        message: "Preparing installation...",
         bytesDone: 0,
         bytesTotal: 0,
         startedAt: Date.now(),
@@ -607,18 +773,39 @@ class GameLauncherService {
     const run = async () => {
       try {
         if (cleanSource === "vanilla") {
-          await this.installVanillaVersion(cleanVersion, installId, controller.signal);
+          await this.installVanillaVersion(
+            cleanVersion,
+            installId,
+            controller.signal,
+          );
         } else if (cleanSource === "fabric") {
-          await this.installFabricProfile(cleanVersion, loaderVersion, installId, controller.signal);
+          await this.installFabricProfile(
+            cleanVersion,
+            loaderVersion,
+            installId,
+            controller.signal,
+          );
         } else if (cleanSource === "forge") {
-          throw new Error("Instalación automática Forge aún no implementada en esta build.");
+          throw new Error(
+            "Automatic Forge installation not yet implemented in this build.",
+          );
         } else {
-          throw new Error(`Fuente no soportada: ${cleanSource}`);
+          throw new Error(`Unsupported source: ${cleanSource}`);
         }
 
-        this.emitInstallUpdate(installId, { busy: false, progress: 100, phase: "done", message: `Instalación lista (${cleanSource}:${cleanVersion}).` });
+        this.emitInstallUpdate(installId, {
+          busy: false,
+          progress: 100,
+          phase: "done",
+          message: `Installation ready (${cleanSource}:${cleanVersion}).`,
+        });
       } catch (error) {
-        this.emitInstallUpdate(installId, { busy: false, phase: "error", message: String(error.message || error), error: String(error.message || error) });
+        this.emitInstallUpdate(installId, {
+          busy: false,
+          phase: "error",
+          message: String(error.message || error),
+          error: String(error.message || error),
+        });
       }
     };
 
@@ -629,17 +816,26 @@ class GameLauncherService {
   getInstallStatus(installId = "") {
     if (installId) {
       const job = this.installJobs.get(installId);
-      return job ? { ok: true, status: job.status } : { ok: false, error: "Instalación no encontrada." };
+      return job
+        ? { ok: true, status: job.status }
+        : { ok: false, error: "Installation not found." };
     }
-    return { ok: true, statuses: [...this.installJobs.values()].map((j) => j.status) };
+    return {
+      ok: true,
+      statuses: [...this.installJobs.values()].map((j) => j.status),
+    };
   }
 
   cancelInstall(installId) {
     const job = this.installJobs.get(String(installId || ""));
-    if (!job) return { ok: false, error: "Instalación no encontrada." };
+    if (!job) return { ok: false, error: "Installation not found." };
     if (!job.status.busy) return { ok: true };
     job.controller.abort();
-    this.emitInstallUpdate(job.id, { busy: false, phase: "cancelled", message: "Instalación cancelada por usuario." });
+    this.emitInstallUpdate(job.id, {
+      busy: false,
+      phase: "cancelled",
+      message: "Installation cancelled by user.",
+    });
     return { ok: true };
   }
 
@@ -648,27 +844,54 @@ class GameLauncherService {
     const versionsDir = path.join(minecraftDir, "versions");
     await ensureDir(versionsDir);
 
-    this.emitInstallUpdate(installId, { phase: "metadata", progress: 10, message: "Resolviendo metadata Fabric..." });
+    this.emitInstallUpdate(installId, {
+      phase: "metadata",
+      progress: 10,
+      message: "Resolving Fabric metadata...",
+    });
     let resolvedLoader = String(loaderVersion || "").trim();
     if (!resolvedLoader) {
       const loaders = await fetchJson(FABRIC_LOADERS_URL);
       resolvedLoader = loaders?.[0]?.version;
     }
-    if (!resolvedLoader) throw new Error("No se pudo resolver loader de Fabric.");
+    if (!resolvedLoader)
+      throw new Error("Fabric loader could not be resolved.");
 
-    const profileJson = await fetchJson(`https://meta.fabricmc.net/v2/versions/loader/${encodeURIComponent(gameVersion)}/${encodeURIComponent(resolvedLoader)}/profile/json`);
-    const versionId = String(profileJson.id || `fabric-loader-${resolvedLoader}-${gameVersion}`);
+    const profileJson = await fetchJson(
+      `https://meta.fabricmc.net/v2/versions/loader/${encodeURIComponent(gameVersion)}/${encodeURIComponent(resolvedLoader)}/profile/json`,
+    );
+    const versionId = String(
+      profileJson.id || `fabric-loader-${resolvedLoader}-${gameVersion}`,
+    );
     const versionFolder = path.join(versionsDir, versionId);
     await ensureDir(versionFolder);
-    await fsp.writeFile(path.join(versionFolder, `${versionId}.json`), JSON.stringify(profileJson, null, 2), "utf8");
+    await fsp.writeFile(
+      path.join(versionFolder, `${versionId}.json`),
+      JSON.stringify(profileJson, null, 2),
+      "utf8",
+    );
 
-    this.emitInstallUpdate(installId, { phase: "vanilla-base", progress: 25, message: `Instalando base vanilla ${gameVersion} para Fabric...` });
+    this.emitInstallUpdate(installId, {
+      phase: "vanilla-base",
+      progress: 25,
+      message: `Installing vanilla ${gameVersion} base for Fabric...`,
+    });
     await this.installVanillaVersion(gameVersion, installId, signal, 25, 95);
 
-    this.emitInstallUpdate(installId, { phase: "finalizing", progress: 98, message: "Perfil Fabric listo." });
+    this.emitInstallUpdate(installId, {
+      phase: "finalizing",
+      progress: 98,
+      message: "Fabric profile ready.",
+    });
   }
 
-  async installVanillaVersion(versionId, installId, signal, baseProgress = 0, maxProgress = 100) {
+  async installVanillaVersion(
+    versionId,
+    installId,
+    signal,
+    baseProgress = 0,
+    maxProgress = 100,
+  ) {
     const minecraftDir = this.getMinecraftDir();
     const versionsDir = path.join(minecraftDir, "versions");
     const librariesDir = path.join(minecraftDir, "libraries");
@@ -676,26 +899,44 @@ class GameLauncherService {
     const indexesDir = path.join(assetsDir, "indexes");
     const objectsDir = path.join(assetsDir, "objects");
 
-    await Promise.all([ensureDir(versionsDir), ensureDir(librariesDir), ensureDir(indexesDir), ensureDir(objectsDir)]);
+    await Promise.all([
+      ensureDir(versionsDir),
+      ensureDir(librariesDir),
+      ensureDir(indexesDir),
+      ensureDir(objectsDir),
+    ]);
 
-    this.emitInstallUpdate(installId, { phase: "metadata", progress: baseProgress + 2, message: "Descargando manifest oficial..." });
+    this.emitInstallUpdate(installId, {
+      phase: "metadata",
+      progress: baseProgress + 2,
+      message: "Downloading official manifest...",
+    });
     const manifest = await fetchJson(MC_MANIFEST_URL);
     const versions = Array.isArray(manifest?.versions) ? manifest.versions : [];
     const target = versions.find((v) => String(v.id) === String(versionId));
-    if (!target || !target.url) throw new Error(`Versión ${versionId} no encontrada en manifest oficial.`);
+    if (!target || !target.url)
+      throw new Error(`Version ${versionId} not found in official manifest.`);
 
     const versionMeta = await fetchJson(target.url);
     const versionFolder = path.join(versionsDir, versionId);
     await ensureDir(versionFolder);
     const versionJsonPath = path.join(versionFolder, `${versionId}.json`);
-    await fsp.writeFile(versionJsonPath, JSON.stringify(versionMeta, null, 2), "utf8");
+    await fsp.writeFile(
+      versionJsonPath,
+      JSON.stringify(versionMeta, null, 2),
+      "utf8",
+    );
 
     const byteCounter = { done: 0, total: 0 };
     const trackChunk = (delta) => {
       if (!delta || !Number.isFinite(delta)) return;
       byteCounter.done += delta;
-      const fraction = byteCounter.total > 0 ? Math.min(1, byteCounter.done / byteCounter.total) : 0;
-      const progress = baseProgress + Math.round((maxProgress - baseProgress) * fraction);
+      const fraction =
+        byteCounter.total > 0
+          ? Math.min(1, byteCounter.done / byteCounter.total)
+          : 0;
+      const progress =
+        baseProgress + Math.round((maxProgress - baseProgress) * fraction);
       this.emitInstallUpdate(installId, {
         progress: Math.min(maxProgress, Math.max(baseProgress, progress)),
         bytesDone: byteCounter.done,
@@ -711,17 +952,20 @@ class GameLauncherService {
       byteCounter.total += Number(client.size || 0);
       tasks.push({
         phase: "client",
-        message: "Descargando client.jar...",
-        run: () => downloadFileWithVerify(client.url, clientPath, {
-          sha1: client.sha1,
-          size: client.size,
-          onProgress: (p) => trackChunk(p.bytes || 0),
-          signal,
-        }),
+        message: "Downloading client.jar...",
+        run: () =>
+          downloadFileWithVerify(client.url, clientPath, {
+            sha1: client.sha1,
+            size: client.size,
+            onProgress: (p) => trackChunk(p.bytes || 0),
+            signal,
+          }),
       });
     }
 
-    const libraries = Array.isArray(versionMeta.libraries) ? versionMeta.libraries : [];
+    const libraries = Array.isArray(versionMeta.libraries)
+      ? versionMeta.libraries
+      : [];
     for (const lib of libraries) {
       if (!applyRuleSet(lib.rules, "windows")) continue;
       const artifact = lib.downloads?.artifact;
@@ -730,13 +974,14 @@ class GameLauncherService {
         byteCounter.total += Number(artifact.size || 0);
         tasks.push({
           phase: "libraries",
-          message: "Descargando librerías...",
-          run: () => downloadFileWithVerify(artifact.url, dest, {
-            sha1: artifact.sha1,
-            size: artifact.size,
-            onProgress: (p) => trackChunk(p.bytes || 0),
-            signal,
-          }),
+          message: "Downloading libraries...",
+          run: () =>
+            downloadFileWithVerify(artifact.url, dest, {
+              sha1: artifact.sha1,
+              size: artifact.size,
+              onProgress: (p) => trackChunk(p.bytes || 0),
+              signal,
+            }),
         });
       } else if (lib.name) {
         const rel = toArtifactPath(lib.name);
@@ -745,11 +990,12 @@ class GameLauncherService {
           const dest = path.join(librariesDir, rel);
           tasks.push({
             phase: "libraries",
-            message: "Descargando librerías...",
-            run: () => downloadFileWithVerify(url, dest, {
-              onProgress: (p) => trackChunk(p.bytes || 0),
-              signal,
-            }),
+            message: "Downloading libraries...",
+            run: () =>
+              downloadFileWithVerify(url, dest, {
+                onProgress: (p) => trackChunk(p.bytes || 0),
+                signal,
+              }),
           });
         }
       }
@@ -762,12 +1008,13 @@ class GameLauncherService {
         tasks.push({
           phase: "natives",
           message: "Descargando nativos...",
-          run: () => downloadFileWithVerify(n.url, dest, {
-            sha1: n.sha1,
-            size: n.size,
-            onProgress: (p) => trackChunk(p.bytes || 0),
-            signal,
-          }),
+          run: () =>
+            downloadFileWithVerify(n.url, dest, {
+              sha1: n.sha1,
+              size: n.size,
+              onProgress: (p) => trackChunk(p.bytes || 0),
+              signal,
+            }),
         });
       }
     }
@@ -786,8 +1033,11 @@ class GameLauncherService {
             onProgress: (p) => trackChunk(p.bytes || 0),
             signal,
           });
-          const indexJson = JSON.parse(await fsp.readFile(assetIndexPath, "utf8"));
-          const objects = indexJson && indexJson.objects ? indexJson.objects : {};
+          const indexJson = JSON.parse(
+            await fsp.readFile(assetIndexPath, "utf8"),
+          );
+          const objects =
+            indexJson && indexJson.objects ? indexJson.objects : {};
           const entries = Object.entries(objects);
           for (const [, obj] of entries) {
             const hash = String(obj.hash || "");
@@ -809,20 +1059,38 @@ class GameLauncherService {
     }
 
     for (let i = 0; i < tasks.length; i += 1) {
-      if (signal && signal.aborted) throw new Error("Instalación cancelada.");
+      if (signal && signal.aborted) throw new Error("Installation cancelled.");
       const t = tasks[i];
       const ratio = tasks.length > 0 ? i / tasks.length : 0;
       const p = baseProgress + Math.round((maxProgress - baseProgress) * ratio);
-      this.emitInstallUpdate(installId, { phase: t.phase, progress: p, message: t.message });
+      this.emitInstallUpdate(installId, {
+        phase: t.phase,
+        progress: p,
+        message: t.message,
+      });
       await t.run();
     }
 
-    this.emitInstallUpdate(installId, { phase: "finalizing", progress: maxProgress, message: `Instalación ${versionId} completada.` });
+    this.emitInstallUpdate(installId, {
+      phase: "finalizing",
+      progress: maxProgress,
+      message: `Installation ${versionId} completed.`,
+    });
   }
 
-  async launchGame({ versionId = "", username = "Player", authMode = "offline", javaPath = "", minMemoryMb = 0, maxMemoryMb = 0, extraJvmArgs = "", extraGameArgs = "" } = {}) {
+  async launchGame({
+    versionId = "",
+    username = "Player",
+    authMode = "offline",
+    javaPath = "",
+    minMemoryMb = 0,
+    maxMemoryMb = 0,
+    extraJvmArgs = "",
+    extraGameArgs = "",
+  } = {}) {
     const cleanVersion = String(versionId || "").trim();
-    if (!cleanVersion) return { ok: false, error: "Versión requerida para lanzar." };
+    if (!cleanVersion)
+      return { ok: false, error: "Version required to launch." };
     const isMsAuth = String(authMode || "").toLowerCase() === "microsoft";
     let authProfile = {
       username,
@@ -848,7 +1116,9 @@ class GameLauncherService {
     const resolved = await this.resolveVersionRuntime(cleanVersion);
     const minecraftDir = resolved.minecraftDir;
     const versionMeta = resolved.mergedMeta;
-    const libraries = Array.isArray(versionMeta.libraries) ? versionMeta.libraries : [];
+    const libraries = Array.isArray(versionMeta.libraries)
+      ? versionMeta.libraries
+      : [];
     const librariesDir = path.join(minecraftDir, "libraries");
 
     const classpathEntries = [];
@@ -857,21 +1127,28 @@ class GameLauncherService {
     for (const lib of libraries) {
       if (!applyRuleSet(lib.rules, "windows")) continue;
       if (lib.downloads?.artifact?.path) {
-        classpathEntries.push(path.join(librariesDir, lib.downloads.artifact.path));
+        classpathEntries.push(
+          path.join(librariesDir, lib.downloads.artifact.path),
+        );
       } else if (lib.name) {
         const rel = toArtifactPath(lib.name);
         if (rel) classpathEntries.push(path.join(librariesDir, rel));
       }
       const nativeInfo = resolveWindowsNativeDownload(lib);
       const nativeDownload = nativeInfo?.download;
-      if (nativeDownload?.path) nativeJarPaths.push(path.join(librariesDir, nativeDownload.path));
-      else if (nativeInfo?.reason) nativeSkipped.push({
-        name: String(lib?.name || "unknown"),
-        reason: nativeInfo.reason,
-      });
+      if (nativeDownload?.path)
+        nativeJarPaths.push(path.join(librariesDir, nativeDownload.path));
+      else if (nativeInfo?.reason)
+        nativeSkipped.push({
+          name: String(lib?.name || "unknown"),
+          reason: nativeInfo.reason,
+        });
     }
     if (!(await fileExists(resolved.clientJarPath))) {
-      return { ok: false, error: `No se encontró client.jar para ${cleanVersion} ni su cadena inheritsFrom.` };
+      return {
+        ok: false,
+        error: `Client.jar not found for ${cleanVersion} or its inheritsFrom chain.`,
+      };
     }
     classpathEntries.push(resolved.clientJarPath);
 
@@ -879,7 +1156,11 @@ class GameLauncherService {
     const versionFolder = resolved.chain[0].folder;
     const nativesDir = path.join(versionFolder, `natives-${Date.now()}`);
     await ensureDir(nativesDir);
-    const nativeExtraction = await this.extractNativeJars(nativeJarPaths, nativesDir, nativeSkipped);
+    const nativeExtraction = await this.extractNativeJars(
+      nativeJarPaths,
+      nativesDir,
+      nativeSkipped,
+    );
     if (!nativeExtraction.ok) return nativeExtraction;
 
     const replacements = {
@@ -913,26 +1194,43 @@ class GameLauncherService {
     };
 
     const cfg = this.loadConfig() || {};
-    const cfgDownloads = cfg?.launcher?.downloads && typeof cfg.launcher.downloads === "object" ? cfg.launcher.downloads : {};
-    const effectiveMinMemory = Math.max(512, Number(minMemoryMb) || Number(cfgDownloads.minMemoryMb) || 1024);
-    const effectiveMaxMemory = Math.max(effectiveMinMemory, Number(maxMemoryMb) || Number(cfgDownloads.maxMemoryMb) || 2048);
-    const effectiveExtraJvmArgs = String(extraJvmArgs || cfgDownloads.extraJvmArgs || "").trim();
-    const effectiveExtraGameArgs = String(extraGameArgs || cfgDownloads.extraGameArgs || "").trim();
+    const cfgDownloads =
+      cfg?.launcher?.downloads && typeof cfg.launcher.downloads === "object"
+        ? cfg.launcher.downloads
+        : {};
+    const effectiveMinMemory = Math.max(
+      512,
+      Number(minMemoryMb) || Number(cfgDownloads.minMemoryMb) || 1024,
+    );
+    const effectiveMaxMemory = Math.max(
+      effectiveMinMemory,
+      Number(maxMemoryMb) || Number(cfgDownloads.maxMemoryMb) || 2048,
+    );
+    const effectiveExtraJvmArgs = String(
+      extraJvmArgs || cfgDownloads.extraJvmArgs || "",
+    ).trim();
+    const effectiveExtraGameArgs = String(
+      extraGameArgs || cfgDownloads.extraGameArgs || "",
+    ).trim();
 
     const jvmArgs = [
       `-Xms${effectiveMinMemory}M`,
       `-Xmx${effectiveMaxMemory}M`,
       "-Dfile.encoding=UTF-8",
-      "-Dclient.encoding.override=UTF-8"
+      "-Dclient.encoding.override=UTF-8",
     ];
     if (Array.isArray(versionMeta.arguments?.jvm)) {
       for (const entry of versionMeta.arguments.jvm) {
         if (typeof entry === "string") {
           jvmArgs.push(formatJvmRuleArg(entry, replacements));
-        } else if (entry && applyRuleSet(entry.rules, "windows", launchFeatures)) {
+        } else if (
+          entry &&
+          applyRuleSet(entry.rules, "windows", launchFeatures)
+        ) {
           const val = entry.value;
           if (Array.isArray(val)) {
-            for (const v of val) jvmArgs.push(formatJvmRuleArg(v, replacements));
+            for (const v of val)
+              jvmArgs.push(formatJvmRuleArg(v, replacements));
           } else if (typeof val === "string") {
             jvmArgs.push(formatJvmRuleArg(val, replacements));
           }
@@ -944,24 +1242,33 @@ class GameLauncherService {
     }
 
     const mainClass = versionMeta.mainClass;
-    if (!mainClass) return { ok: false, error: "mainClass no encontrado en la versión." };
+    if (!mainClass)
+      return { ok: false, error: "mainClass not found in version." };
 
     const gameArgs = [];
     if (Array.isArray(versionMeta.arguments?.game)) {
       for (const entry of versionMeta.arguments.game) {
         if (typeof entry === "string") {
           gameArgs.push(formatJvmRuleArg(entry, replacements));
-        } else if (entry && applyRuleSet(entry.rules, "windows", launchFeatures)) {
+        } else if (
+          entry &&
+          applyRuleSet(entry.rules, "windows", launchFeatures)
+        ) {
           const val = entry.value;
           if (Array.isArray(val)) {
-            for (const v of val) gameArgs.push(formatJvmRuleArg(v, replacements));
+            for (const v of val)
+              gameArgs.push(formatJvmRuleArg(v, replacements));
           } else if (typeof val === "string") {
             gameArgs.push(formatJvmRuleArg(val, replacements));
           }
         }
       }
     } else if (typeof versionMeta.minecraftArguments === "string") {
-      gameArgs.push(...versionMeta.minecraftArguments.split(" ").map((x) => formatJvmRuleArg(x, replacements)));
+      gameArgs.push(
+        ...versionMeta.minecraftArguments
+          .split(" ")
+          .map((x) => formatJvmRuleArg(x, replacements)),
+      );
     }
 
     if (effectiveExtraJvmArgs) {
@@ -973,26 +1280,39 @@ class GameLauncherService {
 
     const finalJvmArgs = jvmArgs.map((x) => formatJvmRuleArg(x, replacements));
     const args = [...finalJvmArgs, mainClass, ...gameArgs];
-    const javaStrategy = await this.buildJavaCandidates({ preferredPath: javaPath, versionId: cleanVersion });
+    const javaStrategy = await this.buildJavaCandidates({
+      preferredPath: javaPath,
+      versionId: cleanVersion,
+    });
     const tried = [];
 
     for (const javaExec of javaStrategy.candidates) {
       tried.push(javaExec);
-      const started = await this.tryLaunchProcess({ javaExec, args, minecraftDir });
+      const started = await this.tryLaunchProcess({
+        javaExec,
+        args,
+        minecraftDir,
+      });
       if (started.ok) {
         this.lastGameStatus.javaPathTried = [...tried];
         this.lastGameStatus.javaPathSelected = javaExec;
         this.lastGameStatus.updatedAt = Date.now();
-        return { ok: true, status: "started", pid: started.pid, javaPath: javaExec, javaPathTried: tried };
+        return {
+          ok: true,
+          status: "started",
+          pid: started.pid,
+          javaPath: javaExec,
+          javaPathTried: tried,
+        };
       }
-      this.lastGameStatus.lastError = started.error || "Fallo de arranque.";
+      this.lastGameStatus.lastError = started.error || "Failed to start.";
       this.lastGameStatus.updatedAt = Date.now();
     }
 
     const recent = this.lastGameStatus.lastLines.slice(-12).join("\n");
     return {
       ok: false,
-      error: `No se pudo iniciar Minecraft. Java recomendado: ${javaStrategy.recommendedMajor}.`,
+      error: `Could not start Minecraft. Recommended Java: ${javaStrategy.recommendedMajor}.`,
       javaPathTried: tried,
       lastErrorLines: recent,
       lastError: this.lastGameStatus.lastError || "",
@@ -1001,7 +1321,9 @@ class GameLauncherService {
 
   stopGame() {
     if (!this.runningGameProcess) return { ok: true };
-    try { this.runningGameProcess.kill(); } catch { }
+    try {
+      this.runningGameProcess.kill();
+    } catch {}
     this.runningGameProcess = null;
     this.lastGameStatus.running = false;
     this.lastGameStatus.updatedAt = Date.now();
@@ -1033,24 +1355,37 @@ class GameLauncherService {
           "}",
           "$zip.Dispose()",
         ].join("; ");
-        const ps = spawnSync("powershell", ["-NoProfile", "-Command", psCommand], { encoding: "utf8" });
+        const ps = spawnSync(
+          "powershell",
+          ["-NoProfile", "-Command", psCommand],
+          { encoding: "utf8" },
+        );
         if (ps.status !== 0) {
           const stderr = String(ps.stderr || "").trim();
-          throw new Error(`No se pudieron extraer nativos desde ${jarPath}. ${stderr || ""}`.trim());
+          throw new Error(
+            `Could not extract natives from ${jarPath}. ${stderr || ""}`.trim(),
+          );
         }
       } finally {
-        await fsp.rm(tmpZipPath, { force: true }).catch(() => { });
+        await fsp.rm(tmpZipPath, { force: true }).catch(() => {});
       }
     }
     const dllCount = await this.countDllsInDirectory(nativesDir);
     if (dllCount <= 0) {
       const detail = attempted.length
-        ? ` JARs nativos detectados=${attempted.length}; intentados: ${attempted.slice(-6).join(" | ")}`
-        : " No se detectaron JARs nativos para extraer.";
-      const skippedTop = Array.isArray(nativeSkipped) && nativeSkipped.length > 0
-        ? ` Descartados (top 3): ${nativeSkipped.slice(0, 3).map((x) => `${x.name}=>${x.reason}`).join(" | ")}`
-        : "";
-      return { ok: false, error: `Nativos no extraídos: no se encontraron DLLs en runtime nativo.${detail}${skippedTop}` };
+        ? ` Detected native JARs=${attempted.length}; attempted: ${attempted.slice(-6).join(" | ")}`
+        : " No native JARs detected for extraction.";
+      const skippedTop =
+        Array.isArray(nativeSkipped) && nativeSkipped.length > 0
+          ? ` Skipped (top 3): ${nativeSkipped
+              .slice(0, 3)
+              .map((x) => `${x.name}=>${x.reason}`)
+              .join(" | ")}`
+          : "";
+      return {
+        ok: false,
+        error: `Natives not extracted: no DLLs found in native runtime.${detail}${skippedTop}`,
+      };
     }
     return { ok: true, dllCount, detectedNativeJars: attempted.length };
   }
@@ -1068,7 +1403,11 @@ class GameLauncherService {
       for (const entry of entries) {
         const full = path.join(dir, entry.name);
         if (entry.isDirectory()) stack.push(full);
-        else if (entry.isFile() && String(entry.name).toLowerCase().endsWith(".dll")) return true;
+        else if (
+          entry.isFile() &&
+          String(entry.name).toLowerCase().endsWith(".dll")
+        )
+          return true;
       }
     }
     return false;
@@ -1088,7 +1427,11 @@ class GameLauncherService {
       for (const entry of entries) {
         const full = path.join(dir, entry.name);
         if (entry.isDirectory()) stack.push(full);
-        else if (entry.isFile() && String(entry.name).toLowerCase().endsWith(".dll")) count += 1;
+        else if (
+          entry.isFile() &&
+          String(entry.name).toLowerCase().endsWith(".dll")
+        )
+          count += 1;
       }
     }
     return count;
@@ -1121,7 +1464,10 @@ class GameLauncherService {
 
     const pushLine = (prefix, raw) => {
       const now = Date.now();
-      const lines = String(raw || "").split(/\r?\n/).map((x) => x.trim()).filter(Boolean);
+      const lines = String(raw || "")
+        .split(/\r?\n/)
+        .map((x) => x.trim())
+        .filter(Boolean);
       for (const ln of lines) {
         this.lastGameStatus.lastLines.push(`${prefix}${ln}`);
         this.lastGameStatus.lineCount += 1;
@@ -1137,13 +1483,18 @@ class GameLauncherService {
         }
       }
       if (this.lastGameStatus.lastLines.length > 120) {
-        this.lastGameStatus.lastLines.splice(0, this.lastGameStatus.lastLines.length - 120);
+        this.lastGameStatus.lastLines.splice(
+          0,
+          this.lastGameStatus.lastLines.length - 120,
+        );
       }
       this.lastGameStatus.updatedAt = now;
     };
 
-    if (child.stdout) child.stdout.on("data", (d) => pushLine("", d.toString("utf8")));
-    if (child.stderr) child.stderr.on("data", (d) => pushLine("[ERR] ", d.toString("utf8")));
+    if (child.stdout)
+      child.stdout.on("data", (d) => pushLine("", d.toString("utf8")));
+    if (child.stderr)
+      child.stderr.on("data", (d) => pushLine("[ERR] ", d.toString("utf8")));
 
     child.on("close", (code) => {
       this.runningGameProcess = null;
@@ -1156,7 +1507,9 @@ class GameLauncherService {
     child.on("error", (error) => {
       this.runningGameProcess = null;
       this.lastGameStatus.running = false;
-      this.lastGameStatus.lastError = String(error?.message || error || "Error al iniciar Java.");
+      this.lastGameStatus.lastError = String(
+        error?.message || error || "Error starting Java.",
+      );
       this.lastGameStatus.lastLifecycleEvent = "error";
       this.lastGameStatus.updatedAt = Date.now();
     });
@@ -1168,10 +1521,19 @@ class GameLauncherService {
         settled = true;
         resolve(result);
       };
-      child.once("error", (err) => finish({ ok: false, error: String(err?.message || err || "Error al iniciar Java.") }));
+      child.once("error", (err) =>
+        finish({
+          ok: false,
+          error: String(err?.message || err || "Error starting Java."),
+        }),
+      );
       child.once("close", (code) => {
         const recent = this.lastGameStatus.lastLines.slice(-12).join("\n");
-        finish({ ok: false, error: `El proceso Java terminó con código ${code}. ${recent}`.trim() });
+        finish({
+          ok: false,
+          error:
+            `The Java process terminated with code ${code}. ${recent}`.trim(),
+        });
       });
       setTimeout(() => {
         this.lastGameStatus.lastLifecycleEvent = "stable_6_5s";
@@ -1186,14 +1548,17 @@ class GameLauncherService {
     const thresholdMs = this.getRuntimeStallThresholdMs();
     const lastOutputAt = Number(this.lastGameStatus?.lastOutputAt || 0);
     const silenceMs = lastOutputAt > 0 ? Math.max(0, now - lastOutputAt) : 0;
-    const stalled = Boolean(this.lastGameStatus?.running) && silenceMs >= thresholdMs;
+    const stalled =
+      Boolean(this.lastGameStatus?.running) && silenceMs >= thresholdMs;
     return {
       ok: true,
       running: Boolean(this.lastGameStatus?.running),
       pid: this.lastGameStatus?.pid || null,
       lastExitCode: this.lastGameStatus?.lastExitCode ?? null,
       lastError: this.lastGameStatus?.lastError || "",
-      lastErrorLines: Array.isArray(this.lastGameStatus?.lastLines) ? this.lastGameStatus.lastLines.slice(-12).join("\n") : "",
+      lastErrorLines: Array.isArray(this.lastGameStatus?.lastLines)
+        ? this.lastGameStatus.lastLines.slice(-12).join("\n")
+        : "",
       startedAt: this.lastGameStatus?.startedAt || 0,
       lastStdoutAt: this.lastGameStatus?.lastStdoutAt || 0,
       lastStderrAt: this.lastGameStatus?.lastStderrAt || 0,
@@ -1203,17 +1568,24 @@ class GameLauncherService {
       stallThresholdMs: thresholdMs,
       silenceMs,
       stalled,
-      javaPathTried: Array.isArray(this.lastGameStatus?.javaPathTried) ? this.lastGameStatus.javaPathTried : [],
+      javaPathTried: Array.isArray(this.lastGameStatus?.javaPathTried)
+        ? this.lastGameStatus.javaPathTried
+        : [],
       javaPathSelected: this.lastGameStatus?.javaPathSelected || "",
       updatedAt: this.lastGameStatus?.updatedAt || Date.now(),
     };
   }
 
-  async isVersionInstalled({ source = "vanilla", versionId = "", loaderVersion = "" } = {}) {
+  async isVersionInstalled({
+    source = "vanilla",
+    versionId = "",
+    loaderVersion = "",
+  } = {}) {
     const cleanSource = String(source || "vanilla").toLowerCase();
     const cleanVersion = String(versionId || "").trim();
     const cleanLoader = String(loaderVersion || "").trim();
-    if (!cleanVersion) return { ok: false, installed: false, error: "Version requerida." };
+    if (!cleanVersion)
+      return { ok: false, installed: false, error: "Version requerida." };
 
     const minecraftDir = this.getMinecraftDir();
     const versionsDir = path.join(minecraftDir, "versions");
@@ -1222,12 +1594,15 @@ class GameLauncherService {
       const versionFolder = path.join(versionsDir, cleanVersion);
       const versionJsonPath = path.join(versionFolder, `${cleanVersion}.json`);
       const versionJarPath = path.join(versionFolder, `${cleanVersion}.jar`);
-      const installed = (await fileExists(versionJsonPath)) && (await fileExists(versionJarPath));
+      const installed =
+        (await fileExists(versionJsonPath)) &&
+        (await fileExists(versionJarPath));
       return { ok: true, installed };
     }
 
     if (cleanSource === "fabric") {
-      if (!cleanLoader) return { ok: true, installed: false, reason: "missing_loader_version" };
+      if (!cleanLoader)
+        return { ok: true, installed: false, reason: "missing_loader_version" };
       const profileId = `fabric-loader-${cleanLoader}-${cleanVersion}`;
       const profileFolder = path.join(versionsDir, profileId);
       const profileJsonPath = path.join(profileFolder, `${profileId}.json`);
@@ -1245,25 +1620,41 @@ class GameLauncherService {
       return { ok: true, installed: false, reason: "forge_not_supported_yet" };
     }
 
-    return { ok: false, installed: false, error: `Fuente no soportada: ${cleanSource}` };
+    return {
+      ok: false,
+      installed: false,
+      error: `Source not supported: ${cleanSource}`,
+    };
   }
 
   getAuthSession() {
     const state = this.getMicrosoftState();
-    const active = state.activeAccountId ? state.accounts.find((a) => a.id === state.activeAccountId) || null : null;
-    return { ok: true, session: active, activeAccountId: state.activeAccountId, count: state.accounts.length };
+    const active = state.activeAccountId
+      ? state.accounts.find((a) => a.id === state.activeAccountId) || null
+      : null;
+    return {
+      ok: true,
+      session: active,
+      activeAccountId: state.activeAccountId,
+      count: state.accounts.length,
+    };
   }
 
   listAuthSessions() {
     const state = this.getMicrosoftState();
-    return { ok: true, accounts: state.accounts, activeAccountId: state.activeAccountId };
+    return {
+      ok: true,
+      accounts: state.accounts,
+      activeAccountId: state.activeAccountId,
+    };
   }
 
   setActiveAuthSession(accountId) {
     const id = String(accountId || "").trim();
-    if (!id) return { ok: false, error: "Cuenta requerida." };
+    if (!id) return { ok: false, error: "Account required." };
     const state = this.getMicrosoftState();
-    if (!state.accounts.find((a) => a.id === id)) return { ok: false, error: "Cuenta no encontrada." };
+    if (!state.accounts.find((a) => a.id === id))
+      return { ok: false, error: "Account not found." };
     state.activeAccountId = id;
     this.saveMicrosoftState(state);
     return { ok: true, activeAccountId: id };
@@ -1271,24 +1662,33 @@ class GameLauncherService {
 
   removeAuthSession(accountId) {
     const id = String(accountId || "").trim();
-    if (!id) return { ok: false, error: "Cuenta requerida." };
+    if (!id) return { ok: false, error: "Account required." };
     const state = this.getMicrosoftState();
     const next = state.accounts.filter((a) => a.id !== id);
     state.accounts = next;
     if (!next.length) state.activeAccountId = null;
     else if (state.activeAccountId === id) state.activeAccountId = next[0].id;
     this.saveMicrosoftState(state);
-    return { ok: true, accounts: state.accounts, activeAccountId: state.activeAccountId };
+    return {
+      ok: true,
+      accounts: state.accounts,
+      activeAccountId: state.activeAccountId,
+    };
   }
 
   async msLogin() {
     try {
       const msCfg = this.getMicrosoftState();
       if (!msCfg.clientId) {
-        return { ok: false, error: "Falta auth.microsoft.clientId en config.json." };
+        return {
+          ok: false,
+          error: "Missing auth.microsoft.clientId in config.json.",
+        };
       }
 
-      const callback = await this.startMicrosoftLoopbackServer(msCfg.loginTimeoutMs);
+      const callback = await this.startMicrosoftLoopbackServer(
+        msCfg.loginTimeoutMs,
+      );
       const redirectUri = callback.redirectUri;
       const pca = new PublicClientApplication({
         auth: {
@@ -1310,17 +1710,28 @@ class GameLauncherService {
         redirectUri,
       });
       if (!tokenRes?.accessToken || !tokenRes?.account) {
-        return { ok: false, error: "No se obtuvo token de Microsoft." };
+        return { ok: false, error: "Could not obtain Microsoft token." };
       }
 
-      const mcAuth = await this.exchangeMicrosoftToMinecraft(tokenRes.accessToken);
+      const mcAuth = await this.exchangeMicrosoftToMinecraft(
+        tokenRes.accessToken,
+      );
       const cacheBlob = tokenCache.serialize();
-      const account = this.buildMicrosoftAccountRecord(tokenRes, mcAuth, cacheBlob);
+      const account = this.buildMicrosoftAccountRecord(
+        tokenRes,
+        mcAuth,
+        cacheBlob,
+      );
       const next = this.upsertMicrosoftAccount(msCfg, account);
       this.saveMicrosoftState(next);
       return { ok: true, account, activeAccountId: next.activeAccountId };
     } catch (error) {
-      return { ok: false, error: String(error?.message || error || "No se pudo iniciar sesión Microsoft.") };
+      return {
+        ok: false,
+        error: String(
+          error?.message || error || "Could not start Microsoft session.",
+        ),
+      };
     }
   }
 
@@ -1335,16 +1746,24 @@ class GameLauncherService {
   getMicrosoftState() {
     const cfg = this.loadConfig() || {};
     if (!cfg.auth || typeof cfg.auth !== "object") cfg.auth = {};
-    const msRaw = cfg.auth.microsoft && typeof cfg.auth.microsoft === "object" ? cfg.auth.microsoft : {};
+    const msRaw =
+      cfg.auth.microsoft && typeof cfg.auth.microsoft === "object"
+        ? cfg.auth.microsoft
+        : {};
     const state = {
-      tenant: String(msRaw.tenant || MS_DEFAULT_TENANT).trim() || MS_DEFAULT_TENANT,
+      tenant:
+        String(msRaw.tenant || MS_DEFAULT_TENANT).trim() || MS_DEFAULT_TENANT,
       clientId: String(msRaw.clientId || "").trim(),
       redirectStrategy: "loopback",
-      loginTimeoutMs: Number.parseInt(String(msRaw.loginTimeoutMs || "180000"), 10) || 180000,
-      accounts: Array.isArray(msRaw.accounts) ? msRaw.accounts.filter((a) => a && typeof a === "object") : [],
+      loginTimeoutMs:
+        Number.parseInt(String(msRaw.loginTimeoutMs || "180000"), 10) || 180000,
+      accounts: Array.isArray(msRaw.accounts)
+        ? msRaw.accounts.filter((a) => a && typeof a === "object")
+        : [],
       activeAccountId: String(msRaw.activeAccountId || "").trim() || null,
     };
-    if (!state.activeAccountId && state.accounts.length) state.activeAccountId = state.accounts[0].id;
+    if (!state.activeAccountId && state.accounts.length)
+      state.activeAccountId = state.accounts[0].id;
     return state;
   }
 
@@ -1352,10 +1771,12 @@ class GameLauncherService {
     const cfg = this.loadConfig() || {};
     if (!cfg.auth || typeof cfg.auth !== "object") cfg.auth = {};
     cfg.auth.microsoft = {
-      tenant: String(state.tenant || MS_DEFAULT_TENANT).trim() || MS_DEFAULT_TENANT,
+      tenant:
+        String(state.tenant || MS_DEFAULT_TENANT).trim() || MS_DEFAULT_TENANT,
       clientId: String(state.clientId || "").trim(),
       redirectStrategy: "loopback",
-      loginTimeoutMs: Number.parseInt(String(state.loginTimeoutMs || "180000"), 10) || 180000,
+      loginTimeoutMs:
+        Number.parseInt(String(state.loginTimeoutMs || "180000"), 10) || 180000,
       accounts: Array.isArray(state.accounts) ? state.accounts : [],
       activeAccountId: String(state.activeAccountId || "").trim() || null,
     };
@@ -1378,14 +1799,19 @@ class GameLauncherService {
       displayName: String(account.name || account.username || "").trim(),
       minecraftUuid: String(mcAuth.uuid || "").trim(),
       minecraftUsername: String(mcAuth.username || "").trim(),
-      expiresOn: tokenRes.expiresOn ? new Date(tokenRes.expiresOn).toISOString() : null,
+      expiresOn: tokenRes.expiresOn
+        ? new Date(tokenRes.expiresOn).toISOString()
+        : null,
       cacheEncrypted,
       updatedAt: new Date().toISOString(),
     };
   }
 
   upsertMicrosoftAccount(state, account) {
-    const next = { ...state, accounts: Array.isArray(state.accounts) ? [...state.accounts] : [] };
+    const next = {
+      ...state,
+      accounts: Array.isArray(state.accounts) ? [...state.accounts] : [],
+    };
     const idx = next.accounts.findIndex((a) => a.id === account.id);
     if (idx >= 0) next.accounts[idx] = account;
     else next.accounts.push(account);
@@ -1407,18 +1833,22 @@ class GameLauncherService {
       const err = reqUrl.searchParams.get("error");
       if (err) {
         res.writeHead(400, { "Content-Type": "text/plain; charset=utf-8" });
-        res.end("Error de autenticación Microsoft. Puedes cerrar esta pestaña.");
-        settle.reject(new Error(reqUrl.searchParams.get("error_description") || err));
+        res.end("Microsoft authentication error. You can close this tab.");
+        settle.reject(
+          new Error(reqUrl.searchParams.get("error_description") || err),
+        );
         return;
       }
       if (code) {
         res.writeHead(200, { "Content-Type": "text/plain; charset=utf-8" });
-        res.end("Autenticación completada. Ya puedes volver al launcher.");
+        res.end(
+          "Authentication completed. You can now return to the launcher.",
+        );
         settle.resolve(code);
         return;
       }
       res.writeHead(404, { "Content-Type": "text/plain; charset=utf-8" });
-      res.end("Ruta no válida.");
+      res.end("Invalid path.");
     });
 
     await new Promise((resolve, reject) => {
@@ -1429,7 +1859,7 @@ class GameLauncherService {
     const port = addr && typeof addr === "object" ? addr.port : 0;
     const redirectUri = `http://127.0.0.1:${port}`;
     const timer = setTimeout(() => {
-      settle.reject(new Error("Tiempo agotado esperando callback de Microsoft."));
+      settle.reject(new Error("Timeout waiting for Microsoft callback."));
     }, loginTimeoutMs);
 
     return {
@@ -1447,58 +1877,87 @@ class GameLauncherService {
   }
 
   async exchangeMicrosoftToMinecraft(msAccessToken) {
-    const userAuth = await httpsRequestJson("https://user.auth.xboxlive.com/user/authenticate", {
-      method: "POST",
-      headers: { "Content-Type": "application/json", Accept: "application/json" },
-      body: JSON.stringify({
-        Properties: {
-          AuthMethod: "RPS",
-          SiteName: "user.auth.xboxlive.com",
-          RpsTicket: `d=${msAccessToken}`,
+    const userAuth = await httpsRequestJson(
+      "https://user.auth.xboxlive.com/user/authenticate",
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Accept: "application/json",
         },
-        RelyingParty: "http://auth.xboxlive.com",
-        TokenType: "JWT",
-      }),
-    });
+        body: JSON.stringify({
+          Properties: {
+            AuthMethod: "RPS",
+            SiteName: "user.auth.xboxlive.com",
+            RpsTicket: `d=${msAccessToken}`,
+          },
+          RelyingParty: "http://auth.xboxlive.com",
+          TokenType: "JWT",
+        }),
+      },
+    );
     const userToken = String(userAuth?.Token || "");
     const uhs = String(userAuth?.DisplayClaims?.xui?.[0]?.uhs || "");
-    if (!userToken || !uhs) throw new Error("No se pudo obtener token de Xbox Live.");
+    if (!userToken || !uhs) throw new Error("No Xbox Live token was obtained.");
 
-    const xstsAuth = await httpsRequestJson("https://xsts.auth.xboxlive.com/xsts/authorize", {
-      method: "POST",
-      headers: { "Content-Type": "application/json", Accept: "application/json" },
-      body: JSON.stringify({
-        Properties: { SandboxId: "RETAIL", UserTokens: [userToken] },
-        RelyingParty: "rp://api.minecraftservices.com/",
-        TokenType: "JWT",
-      }),
-    });
+    const xstsAuth = await httpsRequestJson(
+      "https://xsts.auth.xboxlive.com/xsts/authorize",
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Accept: "application/json",
+        },
+        body: JSON.stringify({
+          Properties: { SandboxId: "RETAIL", UserTokens: [userToken] },
+          RelyingParty: "rp://api.minecraftservices.com/",
+          TokenType: "JWT",
+        }),
+      },
+    );
     const xstsToken = String(xstsAuth?.Token || "");
-    if (!xstsToken) throw new Error("No se pudo obtener XSTS token.");
+    if (!xstsToken) throw new Error("No XSTS token was obtained.");
 
-    const mcLogin = await httpsRequestJson("https://api.minecraftservices.com/authentication/login_with_xbox", {
-      method: "POST",
-      headers: { "Content-Type": "application/json", Accept: "application/json" },
-      body: JSON.stringify({
-        identityToken: `XBL3.0 x=${uhs};${xstsToken}`,
-      }),
-    });
+    const mcLogin = await httpsRequestJson(
+      "https://api.minecraftservices.com/authentication/login_with_xbox",
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Accept: "application/json",
+        },
+        body: JSON.stringify({
+          identityToken: `XBL3.0 x=${uhs};${xstsToken}`,
+        }),
+      },
+    );
     const mcAccessToken = String(mcLogin?.access_token || "");
-    if (!mcAccessToken) throw new Error("No se obtuvo access token de Minecraft.");
+    if (!mcAccessToken)
+      throw new Error("No Minecraft access token was obtained.");
 
-    const profile = await httpsRequestJson("https://api.minecraftservices.com/minecraft/profile", {
-      method: "GET",
-      headers: { Authorization: `Bearer ${mcAccessToken}`, Accept: "application/json" },
-    });
+    const profile = await httpsRequestJson(
+      "https://api.minecraftservices.com/minecraft/profile",
+      {
+        method: "GET",
+        headers: {
+          Authorization: `Bearer ${mcAccessToken}`,
+          Accept: "application/json",
+        },
+      },
+    );
     const uuid = String(profile?.id || "").trim();
     const username = String(profile?.name || "").trim();
-    if (!uuid || !username) throw new Error("No se pudo resolver perfil de Minecraft. Verifica licencia Java en la cuenta.");
+    if (!uuid || !username)
+      throw new Error(
+        "Could not resolve Minecraft profile. Check Java license in account.",
+      );
     return { uuid, username, mcAccessToken };
   }
 
   decodeCacheBlob(account) {
     const blobB64 = String(account?.cacheEncrypted || "");
-    if (!blobB64) throw new Error("Token cache ausente para la cuenta seleccionada.");
+    if (!blobB64)
+      throw new Error("Token cache missing for the selected account.");
     const raw = Buffer.from(blobB64, "base64");
     if (safeStorage.isEncryptionAvailable()) {
       return safeStorage.decryptString(raw);
@@ -1508,9 +1967,19 @@ class GameLauncherService {
 
   async resolveMicrosoftLaunchProfile() {
     const state = this.getMicrosoftState();
-    const active = state.activeAccountId ? state.accounts.find((a) => a.id === state.activeAccountId) : null;
-    if (!active) return { ok: false, error: "No hay cuenta Microsoft activa. Pulsa 'Iniciar sesión'." };
-    if (!state.clientId) return { ok: false, error: "Falta auth.microsoft.clientId en config.json." };
+    const active = state.activeAccountId
+      ? state.accounts.find((a) => a.id === state.activeAccountId)
+      : null;
+    if (!active)
+      return {
+        ok: false,
+        error: "There is no active Microsoft account. Tap 'Sign in'.",
+      };
+    if (!state.clientId)
+      return {
+        ok: false,
+        error: "Microsoft clientId is missing from config.json.",
+      };
     try {
       const pca = new PublicClientApplication({
         auth: {
@@ -1521,17 +1990,31 @@ class GameLauncherService {
       const cache = pca.getTokenCache();
       cache.deserialize(this.decodeCacheBlob(active));
       const all = await cache.getAllAccounts();
-      const msAccount = all.find((a) => String(a.homeAccountId || "") === String(active.homeAccountId || ""));
-      if (!msAccount) return { ok: false, error: "La sesión Microsoft local expiró. Inicia sesión nuevamente." };
+      const msAccount = all.find(
+        (a) =>
+          String(a.homeAccountId || "") === String(active.homeAccountId || ""),
+      );
+      if (!msAccount)
+        return {
+          ok: false,
+          error: "Microsoft local session expired. Please log in again.",
+        };
 
       const tokenRes = await pca.acquireTokenSilent({
         account: msAccount,
         scopes: MS_SCOPES,
         forceRefresh: false,
       });
-      if (!tokenRes?.accessToken) return { ok: false, error: "No se pudo refrescar el token Microsoft." };
-      const mcAuth = await this.exchangeMicrosoftToMinecraft(tokenRes.accessToken);
-      const updated = this.buildMicrosoftAccountRecord(tokenRes, mcAuth, cache.serialize());
+      if (!tokenRes?.accessToken)
+        return { ok: false, error: "Failed to refresh Microsoft token." };
+      const mcAuth = await this.exchangeMicrosoftToMinecraft(
+        tokenRes.accessToken,
+      );
+      const updated = this.buildMicrosoftAccountRecord(
+        tokenRes,
+        mcAuth,
+        cache.serialize(),
+      );
       const next = this.upsertMicrosoftAccount(state, updated);
       this.saveMicrosoftState(next);
       return {
@@ -1546,7 +2029,7 @@ class GameLauncherService {
     } catch (error) {
       return {
         ok: false,
-        error: `Sesión Microsoft inválida o revocada: ${String(error?.message || error)}. Vuelve a iniciar sesión.`,
+        error: `Invalid or revoked Microsoft session: ${String(error?.message || error)}. Please log in again.`,
       };
     }
   }

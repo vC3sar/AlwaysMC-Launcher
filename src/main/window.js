@@ -39,7 +39,11 @@ class WindowManager {
         {
           label: "Ventana",
           submenu: [
-            { role: "togglefullscreen", label: "Pantalla completa (F11)", accelerator: "F11" },
+            {
+              role: "togglefullscreen",
+              label: "Pantalla completa (F11)",
+              accelerator: "F11",
+            },
             { type: "separator" },
             { role: "minimize" },
             { role: "close" },
@@ -51,7 +55,7 @@ class WindowManager {
     } else {
       Menu.setApplicationMenu(null);
     }
-    
+
     return win;
   }
 
