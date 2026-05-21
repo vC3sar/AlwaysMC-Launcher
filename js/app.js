@@ -49,7 +49,6 @@ const actionBtnUse = $("action-btn-use");
 
 let socketReconnectAttempt = 0;
 let onActionSelected = null;
-let languageWatcherTimer = null;
 
 // ── Init icons ────────────────────────────────────────────────────────────────
 window.lucide?.createIcons?.({ icons: window.lucide.icons, attrs: { width: 16, height: 16, "stroke-width": 2.2 } });
@@ -68,14 +67,6 @@ async function setupLanguage() {
   } catch {
     i18n?.setLanguage?.("es");
   }
-}
-
-async function syncLanguageFromConfig() {
-  try {
-    const cfg = await launcherAPI?.getConfig?.();
-    const nextLang = String(cfg?.launcher?.language || "es");
-    if (nextLang !== i18n?.getLanguage?.()) i18n?.setLanguage?.(nextLang);
-  } catch {}
 }
 
 function rerenderLocalizedUI() {
@@ -466,7 +457,10 @@ input.addEventListener("keydown", (e) => {
 // ── Boot ──────────────────────────────────────────────────────────────────────
 setupLanguage().finally(() => {
   i18n?.subscribe?.(() => rerenderLocalizedUI());
-  languageWatcherTimer = setInterval(syncLanguageFromConfig, 1000);
+  launcherAPI?.onLanguageChanged?.((lang) => {
+    i18n?.setLanguage?.(lang);
+    rerenderLocalizedUI();
+  });
   i18n?.applyTranslations?.(document);
   revealWindowWhenMenuReady();
   connectSocket();

@@ -13,7 +13,7 @@
     "reconnectBackoffMaxMs": 4000,
     "reconnectJitterRatio": 0.2,
     "menuBackgroundMode": "auto",
-    "language": "en",
+    "language": "es",
     "catalogCache": {
       "ttlMs": 21600000
     },

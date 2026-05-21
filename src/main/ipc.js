@@ -1,8 +1,16 @@
-const { app, ipcMain } = require("electron");
+const { app, ipcMain, BrowserWindow } = require("electron");
 const path = require("path");
 const configManager = require("./config");
 const windowManager = require("./window");
 const botManager = require("./bot");
+const LANGUAGE_CHANGED_CHANNEL = "settings:languageChanged";
+
+function broadcastLanguageChanged(language) {
+  BrowserWindow.getAllWindows().forEach((win) => {
+    if (!win || win.isDestroyed()) return;
+    win.webContents.send(LANGUAGE_CHANGED_CHANNEL, { language });
+  });
+}
 
 function setupIpcHandlers(gameLauncher) {
   // Config & Profiles
@@ -47,7 +55,9 @@ function setupIpcHandlers(gameLauncher) {
   ipcMain.handle("launcher:getConfig", () => configManager.loadConfig());
   ipcMain.handle("launcher:saveConfig", (_, config) => {
     try {
-      configManager.saveConfig(config);
+      const merged = configManager.mergeLauncherDefaults(config);
+      configManager.saveConfig(merged);
+      broadcastLanguageChanged(String(merged?.launcher?.language || "es"));
       return { ok: true };
     } catch {
       return { ok: false, errorCode: "save_config_failed", error: "Failed to save config.json" };

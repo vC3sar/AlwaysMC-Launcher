@@ -1,2 +1,12 @@
 node_modules/
 config/catalog-cache.json
+dist/
+build/
+dist/*
+dist/**/*
+.gitignore
+.vscode/
+.github/
+.idea/
+*.log
+*.txt

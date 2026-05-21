@@ -7,6 +7,11 @@ const { setupIpcHandlers } = require("./src/main/ipc");
 
 console.log("[Main] main.js - main process is running");
 
+function isKeepAliveTimeoutError(errorLike) {
+  const message = String(errorLike?.message || errorLike || "").toLowerCase();
+  return message.includes("client timed out after");
+}
+
 let gameLauncher = null;
 
 app.whenReady().then(() => {
@@ -44,4 +49,20 @@ app.whenReady().then(() => {
 
 app.on("window-all-closed", () => {
   if (process.platform !== "darwin") app.quit();
+});
+
+process.on("uncaughtException", (error) => {
+  if (isKeepAliveTimeoutError(error)) {
+    console.warn("[Main] Suppressed keepalive timeout:", error?.message || error);
+    return;
+  }
+  console.error("[Main] uncaughtException:", error);
+});
+
+process.on("unhandledRejection", (reason) => {
+  if (isKeepAliveTimeoutError(reason)) {
+    console.warn("[Main] Suppressed keepalive timeout rejection:", reason?.message || reason);
+    return;
+  }
+  console.error("[Main] unhandledRejection:", reason);
 });

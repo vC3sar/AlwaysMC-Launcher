@@ -990,6 +990,12 @@
     }
     i18n?.setLanguage?.("es");
     i18n?.applyTranslations?.(document);
+    launcherAPI?.onLanguageChanged?.((lang) => {
+      i18n?.setLanguage?.(lang);
+      const languageSelect = $("cfg-language");
+      if (languageSelect) languageSelect.value = String(lang || "es");
+      updateMenuAudioToggle();
+    });
     updateMenuAudioToggle();
     startMenuAudio();
     setupMenuAudioUnlockListeners();

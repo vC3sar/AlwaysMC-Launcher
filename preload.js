@@ -1,4 +1,22 @@
 const { contextBridge, ipcRenderer } = require("electron");
+const LANGUAGE_CHANGED_CHANNEL = "settings:languageChanged";
+const languageListeners = new WeakMap();
+
+function onLanguageChanged(callback) {
+  if (typeof callback !== "function") return () => {};
+  const handler = (_, payload) => callback(String(payload?.language || "es"));
+  languageListeners.set(callback, handler);
+  ipcRenderer.on(LANGUAGE_CHANGED_CHANNEL, handler);
+  return () => offLanguageChanged(callback);
+}
+
+function offLanguageChanged(callback) {
+  const handler = languageListeners.get(callback);
+  if (!handler) return;
+  ipcRenderer.removeListener(LANGUAGE_CHANGED_CHANNEL, handler);
+  languageListeners.delete(callback);
+}
+
 // fronted brain of the app
 contextBridge.exposeInMainWorld("launcherAPI", {
   getLastProfile: () => ipcRenderer.invoke("launcher:getLastProfile"),
@@ -31,4 +49,6 @@ contextBridge.exposeInMainWorld("launcherAPI", {
   getFullscreen: () => ipcRenderer.invoke("window:getFullscreen"),
   quitApp: () => ipcRenderer.invoke("app:quit"),
   returnToLauncher: () => ipcRenderer.invoke("app:returnToLauncher"),
+  onLanguageChanged,
+  offLanguageChanged,
 });

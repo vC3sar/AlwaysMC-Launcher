@@ -1181,13 +1181,25 @@ module.exports = function (profile) {
   }
 
   function registerBotEvents(currentBot) {
-    if (
-      currentBot._client &&
-      !currentBot._client.__mcBetaErrorHandlerAttached
-    ) {
+    const isKeepAliveTimeoutError = (err) => {
+      const message = String(err?.message || err || "").toLowerCase();
+      return message.includes("client timed out after");
+    };
+
+    const attachClientErrorHandler = () => {
+      if (!currentBot?._client || currentBot._client.__mcBetaErrorHandlerAttached) {
+        return;
+      }
       currentBot._client.__mcBetaErrorHandlerAttached = true;
       currentBot._client.on("error", (err) => {
         if (handleMenuReadError(err, "client:error")) {
+          return;
+        }
+        if (isKeepAliveTimeoutError(err)) {
+          debugLog(
+            "client:keepalive-timeout",
+            err && err.message ? err.message : String(err),
+          );
           return;
         }
         debugLog(
@@ -1195,7 +1207,19 @@ module.exports = function (profile) {
           err && err.message ? err.message : String(err),
         );
       });
-    }
+    };
+
+    attachClientErrorHandler();
+    const lazyClientErrorBinder = setInterval(() => {
+      if (!currentBot || isShuttingDown()) {
+        clearInterval(lazyClientErrorBinder);
+        return;
+      }
+      attachClientErrorHandler();
+      if (currentBot._client?.__mcBetaErrorHandlerAttached) {
+        clearInterval(lazyClientErrorBinder);
+      }
+    }, 250);
 
     // JOIN A SERVER MODE
     currentBot.on("windowOpen", (window) => {
@@ -1364,6 +1388,7 @@ module.exports = function (profile) {
     });
 
     currentBot.on("end", () => {
+      clearInterval(lazyClientErrorBinder);
       debugLog("bot:end", "connection ended");
       botReady = false;
       pendingOutboundMessages.length = 0;
