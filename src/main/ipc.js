@@ -13,7 +13,7 @@ function setupIpcHandlers(gameLauncher) {
     const profile = configManager.loadProfile();
     if (!profile) {
       console.log("[IPC] startContinue canceled: no saved profile");
-      return { ok: false, error: "No saved profile." };
+      return { ok: false, errorCode: "no_saved_profile", error: "No saved profile." };
     }
     configManager.saveProfile(profile);
     console.log("[IPC] startContinue profile ready", {
@@ -31,6 +31,7 @@ function setupIpcHandlers(gameLauncher) {
       console.log("[IPC] startNew canceled: invalid profile");
       return {
         ok: false,
+        errorCode: "invalid_profile",
         error: "Invalid profile. Verify nickname and server.",
       };
     }
@@ -49,7 +50,7 @@ function setupIpcHandlers(gameLauncher) {
       configManager.saveConfig(config);
       return { ok: true };
     } catch {
-      return { ok: false, error: "Failed to save config.json" };
+      return { ok: false, errorCode: "save_config_failed", error: "Failed to save config.json" };
     }
   });
 
@@ -110,7 +111,7 @@ function setupIpcHandlers(gameLauncher) {
             .loadFile(path.join(__dirname, "../../launcher.html"))
             .then(() => ({ ok: true }));
         }
-        return { ok: false, error: "There is no active window." };
+        return { ok: false, errorCode: "no_active_window", error: "There is no active window." };
       })
       .catch((error) => ({
         ok: false,
@@ -121,61 +122,61 @@ function setupIpcHandlers(gameLauncher) {
   // Game Launcher
   ipcMain.handle("launcher:getVersionCatalog", async () => {
     if (!gameLauncher)
-      return { ok: false, error: "Launcher service not initialized." };
+      return { ok: false, errorCode: "launcher_not_initialized", error: "Launcher service not initialized." };
     return gameLauncher.getVersionCatalog({ forceRefresh: false });
   });
 
   ipcMain.handle("launcher:refreshVersionCatalog", async () => {
     if (!gameLauncher)
-      return { ok: false, error: "Launcher service not initialized." };
+      return { ok: false, errorCode: "launcher_not_initialized", error: "Launcher service not initialized." };
     return gameLauncher.getVersionCatalog({ forceRefresh: true });
   });
 
   ipcMain.handle("launcher:installVersion", async (_, payload) => {
     if (!gameLauncher)
-      return { ok: false, error: "Launcher service not initialized." };
+      return { ok: false, errorCode: "launcher_not_initialized", error: "Launcher service not initialized." };
     return gameLauncher.installVersion(payload || {});
   });
 
   ipcMain.handle("launcher:getInstallStatus", async (_, installId) => {
     if (!gameLauncher)
-      return { ok: false, error: "Launcher service not initialized." };
+      return { ok: false, errorCode: "launcher_not_initialized", error: "Launcher service not initialized." };
     return gameLauncher.getInstallStatus(String(installId || ""));
   });
 
   ipcMain.handle("launcher:cancelInstall", async (_, installId) => {
     if (!gameLauncher)
-      return { ok: false, error: "Launcher service not initialized." };
+      return { ok: false, errorCode: "launcher_not_initialized", error: "Launcher service not initialized." };
     return gameLauncher.cancelInstall(String(installId || ""));
   });
 
   ipcMain.handle("launcher:launchGame", async (_, payload) => {
     if (!gameLauncher)
-      return { ok: false, error: "Launcher service not initialized." };
+      return { ok: false, errorCode: "launcher_not_initialized", error: "Launcher service not initialized." };
     return gameLauncher.launchGame(payload || {});
   });
 
   ipcMain.handle("launcher:isVersionInstalled", async (_, payload) => {
     if (!gameLauncher)
-      return { ok: false, error: "Launcher service not initialized." };
+      return { ok: false, errorCode: "launcher_not_initialized", error: "Launcher service not initialized." };
     return gameLauncher.isVersionInstalled(payload || {});
   });
 
   ipcMain.handle("launcher:getGameRuntimeStatus", async () => {
     if (!gameLauncher)
-      return { ok: false, error: "Launcher service not initialized." };
+      return { ok: false, errorCode: "launcher_not_initialized", error: "Launcher service not initialized." };
     return gameLauncher.getGameRuntimeStatus();
   });
 
   ipcMain.handle("launcher:stopGame", async () => {
     if (!gameLauncher)
-      return { ok: false, error: "Launcher service not initialized." };
+      return { ok: false, errorCode: "launcher_not_initialized", error: "Launcher service not initialized." };
     return gameLauncher.stopGame();
   });
 
   ipcMain.handle("launcher:getJavaRuntimes", async () => {
     if (!gameLauncher)
-      return { ok: false, error: "Launcher service not initialized." };
+      return { ok: false, errorCode: "launcher_not_initialized", error: "Launcher service not initialized." };
     const runtimes = await gameLauncher.detectJavaRuntimes();
     return { ok: true, runtimes };
   });
@@ -199,7 +200,7 @@ function setupIpcHandlers(gameLauncher) {
   // Modloader
   ipcMain.handle("modloader:getForgeCatalog", async () => {
     if (!gameLauncher)
-      return { ok: false, error: "Launcher service not initialized." };
+      return { ok: false, errorCode: "launcher_not_initialized", error: "Launcher service not initialized." };
     const result = await gameLauncher.getVersionCatalog({
       forceRefresh: false,
     });
@@ -208,7 +209,7 @@ function setupIpcHandlers(gameLauncher) {
 
   ipcMain.handle("modloader:getFabricCatalog", async () => {
     if (!gameLauncher)
-      return { ok: false, error: "Launcher service not initialized." };
+      return { ok: false, errorCode: "launcher_not_initialized", error: "Launcher service not initialized." };
     const result = await gameLauncher.getVersionCatalog({
       forceRefresh: false,
     });
@@ -220,39 +221,42 @@ function setupIpcHandlers(gameLauncher) {
   // Auth
   ipcMain.handle("auth:msLogin", async () => {
     if (!gameLauncher)
-      return { ok: false, error: "Launcher service not initialized." };
+      return { ok: false, errorCode: "launcher_not_initialized", error: "Launcher service not initialized." };
     return gameLauncher.msLogin();
   });
 
   ipcMain.handle("auth:msLogout", async () => {
     if (!gameLauncher)
-      return { ok: false, error: "Launcher service not initialized." };
+      return { ok: false, errorCode: "launcher_not_initialized", error: "Launcher service not initialized." };
     return gameLauncher.msLogout();
   });
 
   ipcMain.handle("auth:getSession", async () => {
     if (!gameLauncher)
-      return { ok: false, error: "Launcher service not initialized." };
+      return { ok: false, errorCode: "launcher_not_initialized", error: "Launcher service not initialized." };
     return gameLauncher.getAuthSession();
   });
 
   ipcMain.handle("auth:listSessions", async () => {
     if (!gameLauncher)
-      return { ok: false, error: "Launcher service not initialized." };
+      return { ok: false, errorCode: "launcher_not_initialized", error: "Launcher service not initialized." };
     return gameLauncher.listAuthSessions();
   });
 
   ipcMain.handle("auth:setActiveSession", async (_, accountId) => {
     if (!gameLauncher)
-      return { ok: false, error: "Launcher service not initialized." };
+      return { ok: false, errorCode: "launcher_not_initialized", error: "Launcher service not initialized." };
     return gameLauncher.setActiveAuthSession(String(accountId || ""));
   });
 
   ipcMain.handle("auth:removeSession", async (_, accountId) => {
     if (!gameLauncher)
-      return { ok: false, error: "Launcher service not initialized." };
+      return { ok: false, errorCode: "launcher_not_initialized", error: "Launcher service not initialized." };
     return gameLauncher.removeAuthSession(String(accountId || ""));
   });
 }
 
 module.exports = { setupIpcHandlers };
+
+
+

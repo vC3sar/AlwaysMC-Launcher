@@ -1,5 +1,7 @@
 (function(){
   const NS = (window.MCBetaLauncher = window.MCBetaLauncher || {});
+  const i18n = window.MCSharedI18n;
+  const t = (key, params) => (i18n?.t ? i18n.t(key, params) : key);
   const LISTENER_STORE_KEY = "__mcBetaListeners";
 
   function bindEvent(node, eventName, handler, options = undefined) {
@@ -58,20 +60,20 @@
       bindClick("game-stop-btn", async () => {
         if (!ctx.launcherAPI) return;
         const res = await ctx.launcherAPI.stopGame();
-        if (!res?.ok) return ctx.setGameStatus(res?.error || "No se pudo cerrar el juego.", true);
-        ctx.setGameStatus("Proceso del juego cerrado.");
+        if (!res?.ok) return ctx.setGameStatus(ctx.translateError?.(res) || t("launcher.status.stopGameFail"), true);
+        ctx.setGameStatus(t("launcher.status.gameClosed"));
       });
       bindClick("game-scan-java-btn", async () => {
         if (!ctx.launcherAPI) return;
-        ctx.setGameStatus("Buscando instalaciones de Java...");
+        ctx.setGameStatus(t("launcher.status.searchingJava"));
         const res = await ctx.launcherAPI.getJavaRuntimes();
-        if (!res?.ok) return ctx.setGameStatus(res?.error || "No se pudo detectar Java.", true);
+        if (!res?.ok) return ctx.setGameStatus(ctx.translateError?.(res) || t("launcher.status.detectJavaFail"), true);
         const runtime = Array.isArray(res.runtimes) && res.runtimes.length ? res.runtimes[0] : null;
-        if (!runtime) return ctx.setGameStatus("No se encontró Java automáticamente. Define la ruta manualmente.", true);
+        if (!runtime) return ctx.setGameStatus(t("launcher.status.noJavaFound"), true);
         if (ctx.dom.gameJavaPathInput) ctx.dom.gameJavaPathInput.value = runtime.path;
         await ctx.persistLaunchOptionsToConfig();
         await ctx.launcherAPI.setJavaPath(runtime.path);
-        ctx.setGameStatus(`Java detectado: ${runtime.path}`);
+        ctx.setGameStatus(t("launcher.status.javaDetected", { path: runtime.path }));
       });
       bindClick("game-show-diagnostics-btn", async () => { await ctx.showRuntimeDiagnostics(); });
 
@@ -81,12 +83,12 @@
           const currentConfig = await ctx.launcherAPI.getConfig();
           const parsed = ctx.buildMergedConfig(currentConfig);
           const result = await ctx.launcherAPI.saveConfig(parsed);
-          if (!result?.ok) return ctx.setLauncherStatus(result?.error || "No se pudo guardar.", true);
+          if (!result?.ok) return ctx.setLauncherStatus(ctx.translateError?.(result) || t("launcher.status.saveFailed"), true);
           ctx.setCurrentBgVideoMode(String(parsed.launcher.menuBackgroundMode || "auto").toLowerCase());
           ctx.applyLauncherBackgroundVideo(ctx.getCurrentBgVideoMode());
-          ctx.setLauncherStatus("config.json guardado.");
+          ctx.setLauncherStatus(t("launcher.status.saved"));
         } catch {
-          ctx.setLauncherStatus("JSON invalido en configuracion.", true);
+          ctx.setLauncherStatus(t("launcher.status.invalidJson"), true);
         }
       });
 
@@ -103,7 +105,7 @@
       if (ctx.dom.gameAuthModeSelect) bindEvent(ctx.dom.gameAuthModeSelect, "change", () => {
         if (String(ctx.dom.gameAuthModeSelect.value || "offline") === "microsoft") {
           ctx.dom.gameAuthModeSelect.value = "offline";
-          ctx.setGameStatus("Microsoft/Premium está deshabilitado temporalmente.", true);
+          ctx.setGameStatus(t("launcher.status.msDisabled"), true);
         }
         ctx.updateAuthModeUI();
       });
@@ -112,7 +114,7 @@
         const id = String(ctx.dom.msAccountSelect.value || "");
         if (!id) return;
         const res = await ctx.launcherAPI.setActiveAuthSession(id);
-        if (!res?.ok) return ctx.setMsAuthStatus(res?.error || "No se pudo cambiar cuenta activa.", true);
+        if (!res?.ok) return ctx.setMsAuthStatus(ctx.translateError?.(res) || t("launcher.ms.changeFail"), true);
         ctx.setMsActiveAccountId(id);
         ctx.renderMsAccounts();
       });

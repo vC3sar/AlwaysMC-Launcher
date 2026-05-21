@@ -3,6 +3,13 @@
 
   NS.init = function initLauncherApp() {
     var launcherAPI = window.launcherAPI || null;
+    const i18n = window.MCSharedI18n;
+    const t = (key, params) => (i18n?.t ? i18n.t(key, params) : key);
+    const translateError = (res, fallbackKey = "") => {
+      if (res?.errorCode) return t(`error.${res.errorCode}`);
+      if (res?.error) return String(res.error);
+      return fallbackKey ? t(fallbackKey) : "";
+    };
 
     // ── DOM refs ────────────────────────────────────────────────────────────
     const $ = (id) => document.getElementById(id);
@@ -158,7 +165,7 @@
     function updateMenuAudioToggle() {
       if (!launcherAudioToggle || !launcherMenuAudio) return;
       launcherMenuAudio.muted = menuAudioMuted;
-      const label = menuAudioMuted ? "Activar música" : "Silenciar música";
+      const label = menuAudioMuted ? t("launcher.audio.unmute") : t("launcher.audio.mute");
       launcherAudioToggle.innerHTML = `<i data-lucide="${menuAudioMuted ? "volume-x" : "volume-2"}"></i>`;
       launcherAudioToggle.setAttribute("aria-label", label);
       launcherAudioToggle.setAttribute("title", label);
@@ -190,29 +197,29 @@
       msAccountSelect.innerHTML = "";
       if (!accounts.length) {
         const opt = document.createElement("option");
-        opt.value = ""; opt.textContent = "Sin cuentas";
+        opt.value = ""; opt.textContent = t("launcher.ms.noAccounts");
         msAccountSelect.appendChild(opt);
         msAccountSelect.disabled = true;
-        setMsAuthStatus("No hay sesión Microsoft activa.", true);
+        setMsAuthStatus(t("launcher.ms.noActive"), true);
         return;
       }
       accounts.forEach((a) => {
         const opt = document.createElement("option");
         opt.value = String(a.id || "");
-        opt.textContent = `${a.minecraftUsername || a.displayName || a.username || "Cuenta"} (${a.username || "sin correo"})`;
+        opt.textContent = `${a.minecraftUsername || a.displayName || a.username || t("launcher.ms.account")} (${a.username || t("launcher.ms.noEmail")})`;
         msAccountSelect.appendChild(opt);
       });
       const target = String(msAuthState.activeAccountId || "");
       if (target && Array.from(msAccountSelect.options).some((o) => o.value === target)) msAccountSelect.value = target;
       msAccountSelect.disabled = false;
       const active = getSelectedMsAccount();
-      setMsAuthStatus(active ? `Activa: ${active.minecraftUsername || active.displayName || active.username}` : "Cuenta activa no encontrada.", !active);
+      setMsAuthStatus(active ? t("launcher.ms.active", { name: active.minecraftUsername || active.displayName || active.username }) : t("launcher.ms.activeNotFound"), !active);
     }
 
     async function refreshMsSessions() {
       if (typeof launcherAPI?.listAuthSessions !== "function") return;
       const res = await launcherAPI.listAuthSessions();
-      if (!res?.ok) { setMsAuthStatus(res?.error || "No se pudieron cargar cuentas Microsoft.", true); return; }
+      if (!res?.ok) { setMsAuthStatus(translateError(res, "launcher.ms.loadFail"), true); return; }
       msAuthState = {
         accounts: Array.isArray(res.accounts) ? res.accounts : [],
         activeAccountId: String(res.activeAccountId || "").trim() || null,
@@ -289,21 +296,26 @@
       if (hasOpt(remembered?.versionId)) gameVersionSelect.value = String(remembered.versionId);
       else if (hasOpt(previous)) gameVersionSelect.value = String(previous);
       else if (gameVersionSelect.options.length) gameVersionSelect.selectedIndex = 0;
-      if (!gameVersionSelect.options.length) setGameStatus("Sin resultados para los filtros seleccionados.", true);
+      if (!gameVersionSelect.options.length) setGameStatus(t("launcher.status.noFilterResults"), true);
     }
 
     async function loadGameCatalog(forceRefresh = false) {
       if (!launcherAPI) return;
       const requestId = ++catalogRequestSeq;
-      setGameStatus(forceRefresh ? "Actualizando catálogo..." : "Cargando catálogo...");
+      setGameStatus(forceRefresh ? t("launcher.status.catalogRefreshing") : t("launcher.status.catalogLoading"));
       const result = await (forceRefresh ? launcherAPI.refreshVersionCatalog() : launcherAPI.getVersionCatalog());
       if (requestId < lastAppliedCatalogRequest) return;
       lastAppliedCatalogRequest = requestId;
-      if (!result?.ok) { setGameStatus(result?.error || "No se pudo cargar el catálogo.", true); return; }
+      if (!result?.ok) { setGameStatus(translateError(result, "launcher.status.catalogFail"), true); return; }
       gameCatalog = result.catalog || { vanilla: [], forge: [], fabric: [] };
       refreshVersionSelect();
       const warn = result.warning ? ` (warning: ${result.warning})` : "";
-      setGameStatus(`Catálogo listo: ${gameCatalog.vanilla.length} vanilla, ${gameCatalog.fabric.length} fabric, ${gameCatalog.forge.length} forge${warn}`);
+      setGameStatus(t("launcher.status.catalogReady", {
+        vanilla: gameCatalog.vanilla.length,
+        fabric: gameCatalog.fabric.length,
+        forge: gameCatalog.forge.length,
+        warning: warn,
+      }));
     }
 
     // ── Launch options ───────────────────────────────────────────────────────
@@ -657,6 +669,7 @@
           reconnectBackoffMaxMs: pInt("cfg-reconnect-backoff-max", 4000),
           reconnectJitterRatio: pFloat("cfg-reconnect-jitter", 0.2),
           menuBackgroundMode: bgVideoModeSelect?.value || "auto",
+          language: String($("cfg-language")?.value || "es").toLowerCase(),
         },
       };
     }
@@ -685,6 +698,9 @@
       const mode = String(cfg?.launcher?.menuBackgroundMode || "auto").toLowerCase();
       currentBgVideoMode = BG_VALID_MODES.includes(mode) ? mode : "auto";
       if (bgVideoModeSelect) bgVideoModeSelect.value = currentBgVideoMode;
+      const languageSelect = $("cfg-language");
+      if (languageSelect) languageSelect.value = String(cfg?.launcher?.language || "es");
+      i18n?.setLanguage?.(String(cfg?.launcher?.language || "es"));
       loadConfigIntoForm(cfg || {});
     }
 
@@ -700,7 +716,7 @@
       if (typeof launcherAPI?.toggleFullscreen !== "function") return;
       const state = await launcherAPI.toggleFullscreen();
       const btn = $("menu-fullscreen-btn");
-      if (btn && state?.ok) btn.textContent = state.isFullscreen ? "Salir de pantalla completa (F11)" : "Pantalla completa (F11)";
+      if (btn && state?.ok) btn.textContent = state.isFullscreen ? t("launcher.menu.fullscreen.exit") : t("launcher.menu.fullscreen");
     }
 
     async function quitApplication() {
@@ -816,14 +832,18 @@
         try {
           const parsed = buildMergedConfig(await launcherAPI.getConfig());
           const result = await launcherAPI.saveConfig(parsed);
-          if (!result?.ok) return setLauncherStatus(result?.error || "No se pudo guardar.", true);
+          if (!result?.ok) return setLauncherStatus(translateError(result, "launcher.status.saveFailed"), true);
           currentBgVideoMode = String(parsed.launcher.menuBackgroundMode || "auto").toLowerCase();
           applyLauncherBackgroundVideo(currentBgVideoMode);
-          setLauncherStatus("config.json guardado.");
-        } catch { setLauncherStatus("JSON invalido en configuracion.", true); }
+          i18n?.setLanguage?.(String(parsed?.launcher?.language || "es"));
+          setLauncherStatus(t("launcher.status.saved"));
+        } catch { setLauncherStatus(t("launcher.status.invalidJson"), true); }
       });
 
       bgVideoModeSelect?.addEventListener("change", () => applyLauncherBackgroundVideo(bgVideoModeSelect.value));
+      $("cfg-language")?.addEventListener("change", () => {
+        i18n?.setLanguage?.(String($("cfg-language").value || "es"));
+      });
       playTabBotBtn?.addEventListener("click", () => switchPlayTab("bot"));
       playTabJavaBtn?.addEventListener("click", async () => { switchPlayTab("java"); await ensureJavaCatalogLoadedOnce(); });
 
@@ -850,7 +870,7 @@
       gameAuthModeSelect?.addEventListener("change", () => {
         if (String(gameAuthModeSelect.value || "offline") === "microsoft") {
           gameAuthModeSelect.value = "offline";
-          setGameStatus("Microsoft/Premium está deshabilitado temporalmente.", true);
+          setGameStatus(t("launcher.status.msDisabled"), true);
         }
         updateAuthModeUI();
       });
@@ -859,7 +879,7 @@
         const id = String(msAccountSelect.value || "");
         if (!id) return;
         const res = await launcherAPI.setActiveAuthSession(id);
-        if (!res?.ok) return setMsAuthStatus(res?.error || "No se pudo cambiar cuenta activa.", true);
+        if (!res?.ok) return setMsAuthStatus(translateError(res, "launcher.ms.changeFail"), true);
         msAuthState.activeAccountId = id;
         renderMsAccounts();
       });
@@ -893,6 +913,7 @@
       setGameCatalog: (v) => { gameCatalog = v; },
       getGameCatalog: () => gameCatalog,
       refreshVersionSelect,
+      translateError,
     };
 
     const navigationCtx = {
@@ -935,6 +956,7 @@
       setMsAuthStatus,
       setMsActiveAccountId: (id) => { msAuthState.activeAccountId = id; },
       renderMsAccounts,
+      translateError,
     };
 
     // ── NS plugin overrides ──────────────────────────────────────────────────
@@ -966,6 +988,8 @@
         if (!menuAudioMuted) startMenuAudio(true);
       });
     }
+    i18n?.setLanguage?.("es");
+    i18n?.applyTranslations?.(document);
     updateMenuAudioToggle();
     startMenuAudio();
     setupMenuAudioUnlockListeners();
@@ -975,6 +999,7 @@
         .then((cfg) => {
           const mode = String(cfg?.launcher?.menuBackgroundMode || "auto").toLowerCase();
           currentBgVideoMode = BG_VALID_MODES.includes(mode) ? mode : "auto";
+          i18n?.setLanguage?.(String(cfg?.launcher?.language || "es"));
           if (bgVideoModeSelect) bgVideoModeSelect.value = currentBgVideoMode;
           applyLauncherBackgroundVideo(currentBgVideoMode);
         })
@@ -994,7 +1019,7 @@
       launcherAPI.getFullscreen()
         .then((state) => {
           const btn = $("menu-fullscreen-btn");
-          if (btn && state?.ok) btn.textContent = state.isFullscreen ? "Salir de pantalla completa (F11)" : "Pantalla completa (F11)";
+          if (btn && state?.ok) btn.textContent = state.isFullscreen ? t("launcher.menu.fullscreen.exit") : t("launcher.menu.fullscreen");
         })
         .catch(() => { });
     }

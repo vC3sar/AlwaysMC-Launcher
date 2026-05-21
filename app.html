@@ -33,41 +33,41 @@
     <div id="chat-section">
       <div id="vitals-hud" class="vitals-hud">
         <div class="vital-card"><span class="vital-icon" aria-hidden="true">❤️</span><span
-            class="vital-label">Vida</span><span class="vital-value" id="hud-health">--/20</span></div>
+            class="vital-label" data-i18n="app.vital.health">Vida</span><span class="vital-value" id="hud-health">--/20</span></div>
         <div class="vital-card"><span class="vital-icon" aria-hidden="true">🍗</span><span
-            class="vital-label">Comida</span><span class="vital-value" id="hud-food">--/20</span></div>
-        <button id="end-session-button" type="button" class="hud-end-session-btn" title="Terminar partida y volver al menú"
-          aria-label="Terminar partida y volver al menú">
+            class="vital-label" data-i18n="app.vital.food">Comida</span><span class="vital-value" id="hud-food">--/20</span></div>
+        <button id="end-session-button" type="button" class="hud-end-session-btn" data-i18n-title="app.endSession" title="Terminar partida y volver al menú"
+          data-i18n-aria-label="app.endSession" aria-label="Terminar partida y volver al menú">
           <i data-lucide="log-out"></i>
         </button>
       </div>
       <div id="chat" style="overflow-wrap: anywhere;"></div>
       <div id="reconnect-panel">
         <div class="reconnect-copy">
-          <div class="reconnect-title">Bot desconectado</div>
-          <div class="reconnect-subtitle">Puedes reiniciar la conexión sin recargar la página.</div>
+          <div class="reconnect-title" data-i18n="app.reconnect.title">Bot desconectado</div>
+          <div class="reconnect-subtitle" data-i18n="app.reconnect.subtitle">Puedes reiniciar la conexión sin recargar la página.</div>
           <div class="reconnect-progress" aria-hidden="true">
             <div class="reconnect-progress-bar"></div>
           </div>
-          <div class="reconnect-attempt">Esperando acción…</div>
+          <div class="reconnect-attempt" data-i18n="app.reconnect.waiting">Esperando acción…</div>
         </div>
-        <button id="reconnect-button" type="button">Reconectar</button>
+        <button id="reconnect-button" type="button" data-i18n="app.reconnect.button">Reconectar</button>
       </div>
       <div class="chat-controls">
-        <input type="text" id="input" placeholder="Escribe y presiona Enter">
-        <button id="inventory-button" type="button" class="btn-inventory-mini" title="Ver inventario"
-          aria-label="Ver inventario">🎒</button>
+        <input type="text" id="input" data-i18n-placeholder="app.input.placeholder" placeholder="Escribe y presiona Enter">
+        <button id="inventory-button" type="button" class="btn-inventory-mini" data-i18n-title="app.inventory.title" title="Ver inventario"
+          data-i18n-aria-label="app.inventory.title" aria-label="Ver inventario">🎒</button>
       </div>
     </div>
 
     <div id="sidebar">
       <div class="card sidebar-hero">
-        <div class="sidebar-kicker" data-status="offline">Panel en vivo</div>
-        <h2>Información</h2>
-        <p>Estado de la sesión, jugador y servidor con lectura rápida.</p>
-        <div class="sidebar-meta"><span class="sidebar-meta-label">Fecha</span><span
+        <div class="sidebar-kicker" data-status="offline" data-i18n="app.sidebar.live">Panel en vivo</div>
+        <h2 data-i18n="app.sidebar.info">Información</h2>
+        <p data-i18n="app.sidebar.summary">Estado de la sesión, jugador y servidor con lectura rápida.</p>
+        <div class="sidebar-meta"><span class="sidebar-meta-label" data-i18n="app.sidebar.date">Fecha</span><span
             class="sidebar-meta-value highlight" id="time">--/--/----</span></div>
-        <div class="sidebar-badges"><span class="status-pill">Conectado</span><span class="status-pill ghost">Offline /
+        <div class="sidebar-badges"><span class="status-pill" data-i18n="app.sidebar.connected">Conectado</span><span class="status-pill ghost" data-i18n="app.sidebar.offlinePremium">Offline /
             No premium</span></div>
       </div>
 
@@ -75,13 +75,13 @@
         <div class="card-head">
           <div class="card-icon">👤</div>
           <div>
-            <h3>Jugador</h3>
-            <div class="card-subtitle">Identidad de la sesión</div>
+            <h3 data-i18n="app.card.player">Jugador</h3>
+            <div class="card-subtitle" data-i18n="app.card.playerIdentity">Identidad de la sesión</div>
           </div>
         </div>
-        <div class="card-metric"><span class="metric-label">Nombre</span><span class="metric-value highlight"
+        <div class="card-metric"><span class="metric-label" data-i18n="app.card.name">Nombre</span><span class="metric-value highlight"
             id="username">-</span></div>
-        <div class="card-metric"><span class="metric-label">Versión</span><span class="metric-value"
+        <div class="card-metric"><span class="metric-label" data-i18n="app.card.version">Versión</span><span class="metric-value"
             id="version">-</span></div>
       </div>
 
@@ -89,11 +89,11 @@
         <div class="card-head">
           <div class="card-icon">🌐</div>
           <div>
-            <h3>Conexión</h3>
-            <div class="card-subtitle">Latencia del servidor</div>
+            <h3 data-i18n="app.card.connection">Conexión</h3>
+            <div class="card-subtitle" data-i18n="app.card.serverLatency">Latencia del servidor</div>
           </div>
         </div>
-        <div class="card-metric"><span class="metric-label">Ping</span><span class="metric-value" id="ping">0 ms</span>
+        <div class="card-metric"><span class="metric-label" data-i18n="app.card.ping">Ping</span><span class="metric-value" id="ping">0 ms</span>
         </div>
       </div>
 
@@ -101,13 +101,13 @@
         <div class="card-head">
           <div class="card-icon">🖥</div>
           <div>
-            <h3>Servidor</h3>
-            <div class="card-subtitle">Dirección IP</div>
+            <h3 data-i18n="app.card.server">Servidor</h3>
+            <div class="card-subtitle" data-i18n="app.card.ipAddress">Dirección IP</div>
           </div>
         </div>
-        <div class="card-metric"><span class="metric-label">Host</span><span class="metric-value" id="server">-</span>
+        <div class="card-metric"><span class="metric-label" data-i18n="app.card.host">Host</span><span class="metric-value" id="server">-</span>
         </div>
-        <div class="card-metric"><span class="metric-label">Puerto</span><span class="metric-value"
+        <div class="card-metric"><span class="metric-label" data-i18n="app.card.port">Puerto</span><span class="metric-value"
             id="port">25565</span></div>
       </div>
     </div>
@@ -115,32 +115,31 @@
     <div id="menu-panel" aria-live="polite">
       <div id="menu-header">
         <div>
-          <div id="menu-title">Sin menú activo</div>
-          <div id="menu-meta">Cuando el servidor abra un inventario, aparecerá aquí.</div>
+          <div id="menu-title" data-i18n="app.menu.none">Sin menú activo</div>
+          <div id="menu-meta" data-i18n="app.menu.noneDesc">Cuando el servidor abra un inventario, aparecerá aquí.</div>
         </div>
-        <button id="menu-close-btn" type="button" class="menu-close-btn" aria-label="Cerrar panel">✕</button>
+        <button id="menu-close-btn" type="button" class="menu-close-btn" data-i18n-aria-label="app.menu.closePanel" aria-label="Cerrar panel">✕</button>
       </div>
-      <div id="menu-busy">Cambiando de servidor...</div>
-      <input id="menu-search" type="text" placeholder="Buscar por nombre o lore">
+      <div id="menu-busy" data-i18n="app.menu.busy">Cambiando de servidor...</div>
+      <input id="menu-search" type="text" data-i18n-placeholder="app.menu.search" placeholder="Buscar por nombre o lore">
       <div id="menu-base-filters"></div>
       <div id="menu-results"></div>
       <div id="menu-grid"></div>
-      <div id="menu-empty" class="menu-empty">Aún no hay opciones disponibles.</div>
+      <div id="menu-empty" class="menu-empty" data-i18n="app.menu.empty">Aún no hay opciones disponibles.</div>
     </div>
   </div>
 
   <div id="action-modal" class="action-modal" aria-hidden="true">
     <div class="action-modal-content">
-      <div class="action-modal-header"><span id="action-modal-title" class="action-modal-title">Interactuar con
-          Ítem</span><button id="action-modal-close-btn" type="button" class="action-modal-close"
-          aria-label="Cerrar modal">✕</button></div>
+      <div class="action-modal-header"><span id="action-modal-title" class="action-modal-title" data-i18n="app.modal.title">Interactuar con Ítem</span><button id="action-modal-close-btn" type="button" class="action-modal-close"
+          data-i18n-aria-label="app.modal.close" aria-label="Cerrar modal">✕</button></div>
       <div class="action-modal-body">
-        <p id="action-modal-text">¿Cómo quieres hacer clic en el objeto?</p>
+        <p id="action-modal-text" data-i18n="app.modal.question">¿Cómo quieres hacer clic en el objeto?</p>
         <div class="action-modal-buttons">
-          <button id="action-btn-left" type="button" class="action-btn left">Clic Izquierdo</button>
-          <button id="action-btn-right" type="button" class="action-btn right">Clic Derecho</button>
+          <button id="action-btn-left" type="button" class="action-btn left" data-i18n="app.action.left">Clic Izquierdo</button>
+          <button id="action-btn-right" type="button" class="action-btn right" data-i18n="app.action.right">Clic Derecho</button>
           <button id="action-btn-use" type="button" class="action-btn use"
-            style="grid-column: span 2; margin-top: 4px;">⚡ Usar / Equipar en mano</button>
+            style="grid-column: span 2; margin-top: 4px;" data-i18n="app.action.use">⚡ Usar / Equipar en mano</button>
         </div>
       </div>
     </div>
@@ -148,7 +147,9 @@
 
   <script src="https://unpkg.com/lucide@latest"></script>
   <script src="js/shared/utils.js"></script>
+  <script src="js/shared/i18n.js"></script>
   <script src="js/app.js"></script>
 </body>
 
 </html>
+

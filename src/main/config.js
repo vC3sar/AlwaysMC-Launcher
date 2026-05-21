@@ -24,6 +24,7 @@ function mergeLauncherDefaults(raw) {
     reconnectBackoffMaxMs: Number.parseInt(launcher.reconnectBackoffMaxMs || "4000", 10) || 4000,
     reconnectJitterRatio: Number.parseFloat(launcher.reconnectJitterRatio || "0.2") || 0.2,
     menuBackgroundMode: launcher.menuBackgroundMode || "auto",
+    language: ["es", "en"].includes(String(launcher.language || "").toLowerCase()) ? String(launcher.language).toLowerCase() : "es",
     catalogCache: {
       ttlMs: Number.parseInt(launcher?.catalogCache?.ttlMs || "21600000", 10) || 21600000,
     },
@@ -96,3 +97,6 @@ module.exports = {
   loadProfile,
   saveProfile,
 };
+
+
+

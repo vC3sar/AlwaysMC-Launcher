@@ -18,53 +18,53 @@
     <audio id="launcher-menu-audio" loop>
       <source src="mp3/main-menu.mp3" type="audio/mpeg">
     </audio>
-    <button id="launcher-audio-toggle" class="launcher-audio-toggle" type="button" aria-label="Silenciar música" title="Silenciar música">
+    <button id="launcher-audio-toggle" class="launcher-audio-toggle" type="button" data-i18n-aria-label="launcher.audio.mute" data-i18n-title="launcher.audio.mute" aria-label="Silenciar música" title="Silenciar música">
       <i data-lucide="volume-2"></i>
     </button>
 
     <div class="launcher-shell">
       <div class="launcher-brand">MC-BETA</div>
-      <div class="launcher-sub">Esto nunca termina...</div>
+      <div class="launcher-sub" data-i18n="launcher.subtitle">Esto nunca termina...</div>
 
       <div class="launcher-menu" id="launcher-main-menu">
-        <button type="button" id="menu-play-btn" class="launcher-btn">Jugar (Multijugador)</button>
-        <button type="button" id="menu-config-btn" class="launcher-btn">Configuracion</button>
-        <button type="button" id="menu-info-btn" class="launcher-btn">Informacion</button>
-        <button type="button" id="menu-fullscreen-btn" class="launcher-btn">Pantalla completa (F11)</button>
-        <button type="button" id="menu-exit-btn" class="launcher-btn">Salir</button>
+        <button type="button" id="menu-play-btn" class="launcher-btn" data-i18n="launcher.menu.play">Jugar (Multijugador)</button>
+        <button type="button" id="menu-config-btn" class="launcher-btn" data-i18n="launcher.menu.config">Configuracion</button>
+        <button type="button" id="menu-info-btn" class="launcher-btn" data-i18n="launcher.menu.info">Informacion</button>
+        <button type="button" id="menu-fullscreen-btn" class="launcher-btn" data-i18n="launcher.menu.fullscreen">Pantalla completa (F11)</button>
+        <button type="button" id="menu-exit-btn" class="launcher-btn" data-i18n="launcher.menu.exit">Salir</button>
       </div>
 
       <div id="launcher-play-view" class="launcher-view">
-        <div class="launcher-section-title">Jugar (Multijugador / Juego Java)</div>
-        <div class="launcher-play-tabs" role="tablist" aria-label="Modo de juego">
-          <button type="button" id="play-tab-bot" class="launcher-play-tab active" role="tab" aria-selected="true" aria-controls="play-tab-panel-bot"><i data-lucide="bot"></i><span>Bot rápido</span></button>
-          <button type="button" id="play-tab-java" class="launcher-play-tab" role="tab" aria-selected="false" aria-controls="play-tab-panel-java"><i data-lucide="gamepad-2"></i><span>Juego Java</span></button>
+        <div class="launcher-section-title" data-i18n="launcher.title.play">Jugar (Multijugador / Juego Java)</div>
+        <div class="launcher-play-tabs" role="tablist" data-i18n-aria-label="launcher.play.modeAria" aria-label="Modo de juego">
+          <button type="button" id="play-tab-bot" class="launcher-play-tab active" role="tab" aria-selected="true" aria-controls="play-tab-panel-bot"><i data-lucide="bot"></i><span data-i18n="launcher.play.botFast">Bot rápido</span></button>
+          <button type="button" id="play-tab-java" class="launcher-play-tab" role="tab" aria-selected="false" aria-controls="play-tab-panel-java"><i data-lucide="gamepad-2"></i><span data-i18n="launcher.play.javaGame">Juego Java</span></button>
         </div>
         <div id="play-tab-panel-bot" class="launcher-play-panel active" role="tabpanel">
-          <div class="launcher-helper-text">Conexión rápida al panel Mineflayer.</div>
+          <div class="launcher-helper-text" data-i18n="launcher.play.botHelp">Conexión rápida al panel Mineflayer.</div>
           <div class="launcher-row">
-            <button type="button" id="continue-last-btn" class="launcher-btn alt"><i data-lucide="history"></i><span>Continuar con la ultima</span></button>
-            <button type="button" id="create-new-btn" class="launcher-btn alt"><i data-lucide="plus-circle"></i><span>Crear nueva</span></button>
+            <button type="button" id="continue-last-btn" class="launcher-btn alt"><i data-lucide="history"></i><span data-i18n="launcher.play.continue">Continuar con la ultima</span></button>
+            <button type="button" id="create-new-btn" class="launcher-btn alt"><i data-lucide="plus-circle"></i><span data-i18n="launcher.play.create">Crear nueva</span></button>
           </div>
           <div id="new-profile-form" class="launcher-form hidden">
-            <input id="new-username" type="text" placeholder="Nickname offline/no premium">
-            <input id="new-ip" type="text" placeholder="IP (ej: mc.haliacraft.com)">
-            <input id="new-port" type="number" placeholder="Puerto (25565)">
-            <input id="new-version" type="text" placeholder="Version (ej: 1.21.11)">
-            <button type="button" id="start-new-profile-btn" class="launcher-btn"><i data-lucide="rocket"></i><span>Iniciar nueva partida</span></button>
+            <input id="new-username" type="text" data-i18n-placeholder="launcher.form.username" placeholder="Nickname offline/no premium">
+            <input id="new-ip" type="text" data-i18n-placeholder="launcher.form.ip" placeholder="IP (ej: mc.haliacraft.com)">
+            <input id="new-port" type="number" data-i18n-placeholder="launcher.form.port" placeholder="Puerto (25565)">
+            <input id="new-version" type="text" data-i18n-placeholder="launcher.form.version" placeholder="Version (ej: 1.21.11)">
+            <button type="button" id="start-new-profile-btn" class="launcher-btn"><i data-lucide="rocket"></i><span data-i18n="launcher.play.startNew">Iniciar nueva partida</span></button>
           </div>
         </div>
         <div id="play-tab-panel-java" class="launcher-play-panel" role="tabpanel" hidden>
-          <div class="launcher-helper-text">Selecciona modo y versión, luego pulsa Lanzar.</div>
+          <div class="launcher-helper-text" data-i18n="launcher.play.javaHelp">Selecciona modo y versión, luego pulsa Lanzar.</div>
           <div class="launcher-form launcher-java-layout">
             <section class="launcher-java-card">
               <div class="launcher-java-top-row">
                 <div class="launcher-java-field">
-                  <label for="game-username"><i data-lucide="user-round"></i><span>Nickname (offline)</span></label>
+                  <label for="game-username"><i data-lucide="user-round"></i><span data-i18n="launcher.form.usernameOffline">Nickname (offline)</span></label>
                   <input id="game-username" type="text" placeholder="JugadorOffline">
                 </div>
                 <div class="launcher-java-field">
-                  <label for="game-auth-mode"><i data-lucide="key-round"></i><span>Modo de autenticación</span></label>
+                  <label for="game-auth-mode"><i data-lucide="key-round"></i><span data-i18n="launcher.auth.mode">Modo de autenticación</span></label>
                   <select id="game-auth-mode">
                     <option value="offline">Offline</option>
                     <option value="microsoft" disabled>Microsoft (temporalmente deshabilitado)</option>
@@ -72,7 +72,7 @@
                 </div>
               </div>
 
-              <label for="game-distribution"><i data-lucide="layers"></i><span>Distribución</span></label>
+              <label for="game-distribution"><i data-lucide="layers"></i><span data-i18n="launcher.form.distribution">Distribución</span></label>
               <select id="game-distribution">
                 <option value="vanilla">Vanilla</option>
                 <option value="fabric">Fabric</option>
@@ -80,72 +80,72 @@
               </select>
 
               <div id="ms-auth-panel" class="launcher-ms-auth-panel hidden">
-                <label for="ms-account-select"><i data-lucide="user-check"></i><span>Cuenta Microsoft activa</span></label>
+                <label for="ms-account-select"><i data-lucide="user-check"></i><span data-i18n="launcher.ms.activeAccount">Cuenta Microsoft activa</span></label>
                 <select id="ms-account-select"></select>
                 <div class="launcher-row">
-                  <button type="button" id="ms-login-btn" class="launcher-link"><i data-lucide="log-in"></i><span>Iniciar sesión</span></button>
-                  <button type="button" id="ms-logout-btn" class="launcher-link"><i data-lucide="log-out"></i><span>Cerrar sesión</span></button>
-                  <button type="button" id="ms-remove-btn" class="launcher-link"><i data-lucide="user-minus"></i><span>Quitar cuenta</span></button>
+                  <button type="button" id="ms-login-btn" class="launcher-link"><i data-lucide="log-in"></i><span data-i18n="launcher.auth.login">Iniciar sesión</span></button>
+                  <button type="button" id="ms-logout-btn" class="launcher-link"><i data-lucide="log-out"></i><span data-i18n="launcher.auth.logout">Cerrar sesión</span></button>
+                  <button type="button" id="ms-remove-btn" class="launcher-link"><i data-lucide="user-minus"></i><span data-i18n="launcher.auth.remove">Quitar cuenta</span></button>
                 </div>
                 <div id="ms-auth-status" class="launcher-status" data-kind="ok"></div>
               </div>
             </section>
 
             <section class="launcher-java-card">
-              <label for="game-version-select"><i data-lucide="list-tree"></i><span>Versión disponible</span></label>
+              <label for="game-version-select"><i data-lucide="list-tree"></i><span data-i18n="launcher.form.availableVersion">Versión disponible</span></label>
               <div id="game-version-type-filters" class="launcher-version-filters">
-                <label class="launcher-check"><input id="filter-release" type="checkbox" checked><span>Release</span></label>
-                <label class="launcher-check"><input id="filter-snapshot" type="checkbox"><span>Snapshot</span></label>
-                <label class="launcher-check"><input id="filter-old-beta" type="checkbox"><span>Old Beta</span></label>
-                <label class="launcher-check"><input id="filter-old-alpha" type="checkbox"><span>Old Alpha</span></label>
+                <label class="launcher-check"><input id="filter-release" type="checkbox" checked><span data-i18n="launcher.filter.release">Release</span></label>
+                <label class="launcher-check"><input id="filter-snapshot" type="checkbox"><span data-i18n="launcher.filter.snapshot">Snapshot</span></label>
+                <label class="launcher-check"><input id="filter-old-beta" type="checkbox"><span data-i18n="launcher.filter.oldBeta">Old Beta</span></label>
+                <label class="launcher-check"><input id="filter-old-alpha" type="checkbox"><span data-i18n="launcher.filter.oldAlpha">Old Alpha</span></label>
               </div>
               <select id="game-version-select"></select>
             </section>
 
             <details id="game-advanced-section" class="launcher-advanced-toggle">
-              <summary><i data-lucide="sliders-horizontal"></i><span>Avanzado</span></summary>
+              <summary><i data-lucide="sliders-horizontal"></i><span data-i18n="launcher.advanced">Avanzado</span></summary>
               <div class="launcher-advanced-body">
-                <label for="game-java-path"><i data-lucide="coffee"></i><span>Java path (opcional)</span></label>
+                <label for="game-java-path"><i data-lucide="coffee"></i><span data-i18n="launcher.form.javaPath">Java path (opcional)</span></label>
                 <input id="game-java-path" type="text" placeholder="C:\\Program Files\\Java\\...\\bin\\javaw.exe">
 
                 <div class="launcher-advanced-memory">
                   <div>
-                    <label for="game-min-memory-mb"><i data-lucide="memory-stick"></i><span>Memoria mínima (MB)</span></label>
+                    <label for="game-min-memory-mb"><i data-lucide="memory-stick"></i><span data-i18n="launcher.form.minMemory">Memoria mínima (MB)</span></label>
                     <input id="game-min-memory-mb" type="number" min="512" step="256" placeholder="1024">
                   </div>
                   <div>
-                    <label for="game-max-memory-mb"><i data-lucide="memory-stick"></i><span>Memoria máxima (MB)</span></label>
+                    <label for="game-max-memory-mb"><i data-lucide="memory-stick"></i><span data-i18n="launcher.form.maxMemory">Memoria máxima (MB)</span></label>
                     <input id="game-max-memory-mb" type="number" min="1024" step="256" placeholder="2048">
                   </div>
                 </div>
 
-                <label for="game-extra-jvm-args"><i data-lucide="terminal-square"></i><span>Args JVM extra</span></label>
+                <label for="game-extra-jvm-args"><i data-lucide="terminal-square"></i><span data-i18n="launcher.form.jvmArgs">Args JVM extra</span></label>
                 <input id="game-extra-jvm-args" type="text" placeholder="-XX:+UseG1GC -XX:+UnlockExperimentalVMOptions">
 
-                <label for="game-extra-game-args"><i data-lucide="command"></i><span>Args de juego extra</span></label>
+                <label for="game-extra-game-args"><i data-lucide="command"></i><span data-i18n="launcher.form.gameArgs">Args de juego extra</span></label>
                 <input id="game-extra-game-args" type="text" placeholder="--quickPlaySingleplayer Mundo1">
 
-                <button type="button" id="game-scan-java-btn" class="launcher-link"><i data-lucide="search-check"></i><span>Detectar Java</span></button>
+                <button type="button" id="game-scan-java-btn" class="launcher-link"><i data-lucide="search-check"></i><span data-i18n="launcher.form.detectJava">Detectar Java</span></button>
               </div>
             </details>
 
             <div class="launcher-row launcher-row-actions launcher-java-tools">
             </div>
             <div class="launcher-row launcher-row-actions launcher-java-main-actions">
-              <button type="button" id="game-launch-btn" class="launcher-btn"><i data-lucide="play"></i><span>Lanzar juego</span></button>
-              <button type="button" id="game-stop-btn" class="launcher-link"><i data-lucide="square"></i><span>Cerrar juego</span></button>
+              <button type="button" id="game-launch-btn" class="launcher-btn"><i data-lucide="play"></i><span data-i18n="launcher.form.launchGame">Lanzar juego</span></button>
+              <button type="button" id="game-stop-btn" class="launcher-link"><i data-lucide="square"></i><span data-i18n="launcher.form.closeGame">Cerrar juego</span></button>
             </div>
             <div class="launcher-status-wrap">
               <div id="game-install-status" class="launcher-status launcher-status-terminal" data-kind="ok"></div>
-              <button type="button" id="game-show-diagnostics-btn" class="launcher-status-icon-side-btn" aria-label="Ver diagnóstico" title="Ver diagnóstico"><i data-lucide="stethoscope"></i></button>
+              <button type="button" id="game-show-diagnostics-btn" class="launcher-status-icon-side-btn" data-i18n-aria-label="launcher.form.viewDiagnostics" data-i18n-title="launcher.form.viewDiagnostics" aria-label="Ver diagnóstico" title="Ver diagnóstico"><i data-lucide="stethoscope"></i></button>
             </div>
           </div>
         </div>
-        <button type="button" id="play-back-btn" class="launcher-link">Volver</button>
+        <button type="button" id="play-back-btn" class="launcher-link" data-i18n="common.back">Volver</button>
       </div>
 
       <div id="launcher-config-view" class="launcher-view">
-        <div class="launcher-section-title">Configuracion (config.json)</div>
+        <div class="launcher-section-title" data-i18n="launcher.title.config">Configuracion (config.json)</div>
         <div class="launcher-form">
           <label for="cfg-client-id">Discord Client ID</label>
           <input id="cfg-client-id" type="text" placeholder="your_discord_app_client_id_here">
@@ -176,19 +176,26 @@
           <select id="cfg-verbose-mode"><option value="app">Solo logs de app</option><option value="all">App + bot/server/chat/system</option></select>
         </div>
         <div class="launcher-row">
-          <label for="bg-video-mode-select">Video menu:</label>
+          <label for="cfg-language" data-i18n="launcher.form.language">Idioma</label>
+          <select id="cfg-language">
+            <option value="es" data-i18n="lang.es">Español</option>
+            <option value="en" data-i18n="lang.en">Inglés</option>
+          </select>
+        </div>
+        <div class="launcher-row">
+          <label for="bg-video-mode-select" data-i18n="launcher.form.videoMenu">Video menu:</label>
           <select id="bg-video-mode-select"><option value="auto">Auto</option><option value="1080p">Forzar 1080p</option><option value="2k">Forzar 2K</option><option value="4k">Forzar 4K</option></select>
         </div>
         <div class="launcher-row">
-          <button type="button" id="save-config-btn" class="launcher-btn">Guardar config.json</button>
-          <button type="button" id="config-back-btn" class="launcher-link">Volver</button>
+          <button type="button" id="save-config-btn" class="launcher-btn" data-i18n="common.saveConfig">Guardar config.json</button>
+          <button type="button" id="config-back-btn" class="launcher-link" data-i18n="common.back">Volver</button>
         </div>
       </div>
 
       <div id="launcher-info-view" class="launcher-view">
-        <div class="launcher-section-title">Informacion</div>
+        <div class="launcher-section-title" data-i18n="launcher.menu.info">Informacion</div>
         <pre id="info-content"></pre>
-        <button type="button" id="info-back-btn" class="launcher-link">Volver</button>
+        <button type="button" id="info-back-btn" class="launcher-link" data-i18n="common.back">Volver</button>
       </div>
 
       <div id="launcher-status" class="launcher-status"></div>
@@ -206,6 +213,7 @@
 
   <script src="https://unpkg.com/lucide@latest"></script>
   <script src="js/shared/utils.js"></script>
+  <script src="js/shared/i18n.js"></script>
   <script src="js/launcher/utils.js"></script>
   <script src="js/launcher/state.js"></script>
   <script src="js/launcher/dom.js"></script>
@@ -223,3 +231,4 @@
   <script src="js/launcher.js"></script>
 </body>
 </html>
+

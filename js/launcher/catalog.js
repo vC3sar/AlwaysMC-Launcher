@@ -1,5 +1,7 @@
 (function(){
   const NS = (window.MCBetaLauncher = window.MCBetaLauncher || {});
+  const i18n = window.MCSharedI18n;
+  const t = (key, params) => (i18n?.t ? i18n.t(key, params) : key);
 
   NS.catalog = {
     refreshVersionSelect(ctx) {
@@ -27,7 +29,7 @@
       if (remembered?.versionId && hasOption(remembered.versionId)) gameVersionSelect.value = String(remembered.versionId);
       else if (previous && hasOption(previous)) gameVersionSelect.value = String(previous);
       else if (gameVersionSelect.options.length > 0) gameVersionSelect.selectedIndex = 0;
-      if (gameVersionSelect.options.length === 0) setGameStatus("Sin resultados para los filtros seleccionados.", true);
+      if (gameVersionSelect.options.length === 0) setGameStatus(t("launcher.status.noFilterResults"), true);
     },
 
     applyVersionFilters(_ctx, entries, distribution, filters) {
@@ -50,19 +52,24 @@
       if (!launcherAPI) return;
       const requestId = getCatalogRequestSeq() + 1;
       setCatalogRequestSeq(requestId);
-      setGameStatus(forceRefresh ? "Actualizando catálogo..." : "Cargando catálogo...");
+      setGameStatus(forceRefresh ? t("launcher.status.catalogRefreshing") : t("launcher.status.catalogLoading"));
       const result = forceRefresh ? await launcherAPI.refreshVersionCatalog() : await launcherAPI.getVersionCatalog();
       if (requestId < getLastAppliedCatalogRequest()) return;
       setLastAppliedCatalogRequest(requestId);
       if (!result?.ok) {
-        setGameStatus(result?.error || "No se pudo cargar el catálogo.", true);
+        setGameStatus(ctx.translateError?.(result) || result?.error || t("launcher.status.catalogFail"), true);
         return;
       }
       setGameCatalog(result.catalog || { vanilla: [], forge: [], fabric: [] });
       refreshVersionSelect();
       const catalog = getGameCatalog();
       const warning = result.warning ? ` (warning: ${result.warning})` : "";
-      setGameStatus(`Catálogo listo: ${catalog.vanilla.length} vanilla, ${catalog.fabric.length} fabric, ${catalog.forge.length} forge${warning}`);
+      setGameStatus(t("launcher.status.catalogReady", {
+        vanilla: catalog.vanilla.length,
+        fabric: catalog.fabric.length,
+        forge: catalog.forge.length,
+        warning,
+      }));
     },
   };
 })();
