@@ -1,5 +1,5 @@
 const { contextBridge, ipcRenderer } = require("electron");
-
+// fronted brain of the app
 contextBridge.exposeInMainWorld("launcherAPI", {
   getLastProfile: () => ipcRenderer.invoke("launcher:getLastProfile"),
   startContinue: () => ipcRenderer.invoke("launcher:startContinue"),
