@@ -1,13 +1,43 @@
 const path = require("path");
+const { app } = require("electron");
+const fs = require("fs");
 const { loadJsonSafe, saveJson, parseHostAndPort } = require("./utils");
 
 const APP_ROOT = path.join(__dirname, "../../");
-const PROFILE_FILE = path.join(APP_ROOT, "profiles.json");
-const CONFIG_FILE = path.join(APP_ROOT, "config.json");
+const LEGACY_PROFILE_FILE = path.join(APP_ROOT, "profiles.json");
+const LEGACY_CONFIG_FILE = path.join(APP_ROOT, "config.json");
 const DEFAULT_SERVER = "mc.haliacraft.com";
 
+function getStorageDir() {
+  return app.isPackaged
+    ? path.join(app.getPath("userData"), "data")
+    : APP_ROOT;
+}
+
+function getProfileFile() {
+  return path.join(getStorageDir(), "profiles.json");
+}
+
+function getConfigFile() {
+  return path.join(getStorageDir(), "config.json");
+}
+
+function migrateLegacyFileIfNeeded(legacyPath, currentPath) {
+  try {
+    if (!app.isPackaged) return;
+    if (fs.existsSync(currentPath)) return;
+    if (!fs.existsSync(legacyPath)) return;
+    fs.mkdirSync(path.dirname(currentPath), { recursive: true });
+    fs.copyFileSync(legacyPath, currentPath);
+  } catch (error) {
+    console.warn("[Config] Legacy migration failed:", error?.message || error);
+  }
+}
+
 function loadConfig() {
-  return loadJsonSafe(CONFIG_FILE, {});
+  const file = getConfigFile();
+  migrateLegacyFileIfNeeded(LEGACY_CONFIG_FILE, file);
+  return loadJsonSafe(file, {});
 }
 
 function mergeLauncherDefaults(raw) {
@@ -35,6 +65,15 @@ function mergeLauncherDefaults(raw) {
       maxMemoryMb: Number.parseInt(String(launcher?.downloads?.maxMemoryMb || "2048"), 10) || 2048,
       extraJvmArgs: String(launcher?.downloads?.extraJvmArgs || "").trim(),
       extraGameArgs: String(launcher?.downloads?.extraGameArgs || "").trim(),
+      performanceProfileId: String(launcher?.downloads?.performanceProfileId || "vanilla_fabric").trim() || "vanilla_fabric",
+      instanceMode: String(launcher?.downloads?.instanceMode || "dedicated").trim() || "dedicated",
+      performanceProfiles: {
+        fabric_performance_v1: {
+          enabled: launcher?.downloads?.performanceProfiles?.fabric_performance_v1?.enabled !== false,
+          channel: "stable",
+          instanceDir: String(launcher?.downloads?.performanceProfiles?.fabric_performance_v1?.instanceDir || "").trim(),
+        },
+      },
     },
   };
   if (!cfg.auth || typeof cfg.auth !== "object") cfg.auth = {};
@@ -75,21 +114,23 @@ function normalizeProfile(profile) {
 }
 
 function loadProfile() {
-  return normalizeProfile(loadJsonSafe(PROFILE_FILE, null));
+  const file = getProfileFile();
+  migrateLegacyFileIfNeeded(LEGACY_PROFILE_FILE, file);
+  return normalizeProfile(loadJsonSafe(file, null));
 }
 
 function saveProfile(profile) {
-  saveJson(PROFILE_FILE, { ...profile, mode: "nogui" });
+  saveJson(getProfileFile(), { ...profile, mode: "nogui" });
 }
 
 function saveConfig(config) {
-  saveJson(CONFIG_FILE, mergeLauncherDefaults(config));
+  saveJson(getConfigFile(), mergeLauncherDefaults(config));
 }
 
 module.exports = {
   APP_ROOT,
-  CONFIG_FILE,
-  PROFILE_FILE,
+  getConfigFile,
+  getProfileFile,
   loadConfig,
   saveConfig,
   mergeLauncherDefaults,

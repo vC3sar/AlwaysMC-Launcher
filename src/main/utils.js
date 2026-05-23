@@ -1,4 +1,5 @@
 const fs = require("fs");
+const path = require("path");
 
 function parseHostAndPort(hostInput, portInput, defaultServer = "mc.haliacraft.com") {
   const rawHost = String(hostInput ?? "").trim();
@@ -29,6 +30,7 @@ function loadJsonSafe(file, fallback) {
 }
 
 function saveJson(file, data) {
+  fs.mkdirSync(path.dirname(file), { recursive: true });
   fs.writeFileSync(file, JSON.stringify(data, null, 2));
 }
 

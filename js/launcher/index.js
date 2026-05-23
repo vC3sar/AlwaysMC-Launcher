@@ -25,6 +25,7 @@
     const launcherControlsHint = $("launcher-controls-hint");
     const gameAuthModeSelect = $("game-auth-mode");
     const gameDistributionSelect = $("game-distribution");
+    const gamePerformanceProfileSelect = $("game-performance-profile");
     const gameVersionSelect = $("game-version-select");
     const gameUsernameInput = $("game-username");
     const msAuthPanel = $("ms-auth-panel");
@@ -270,6 +271,13 @@
     function updateFilterVisibilityByDistribution() {
       const vanilla = String(gameDistributionSelect?.value || "vanilla") === "vanilla";
       if (gameVersionTypeFilters) gameVersionTypeFilters.style.display = vanilla ? "grid" : "none";
+      if (gamePerformanceProfileSelect) {
+        const isFabric = String(gameDistributionSelect?.value || "vanilla") === "fabric";
+        const profileLabel = document.querySelector('label[for="game-performance-profile"]');
+        gamePerformanceProfileSelect.disabled = !isFabric;
+        gamePerformanceProfileSelect.classList.toggle("hidden", !isFabric);
+        profileLabel?.classList.toggle("hidden", !isFabric);
+      }
       if (!vanilla) setGameStatus("Filtros de tipo aplican solo a Vanilla.", false);
     }
 
@@ -326,17 +334,37 @@
       if (gameMaxMemoryInput) gameMaxMemoryInput.value = String(dl.maxMemoryMb ?? 2048);
       if (gameExtraJvmArgsInput) gameExtraJvmArgsInput.value = String(dl.extraJvmArgs || "");
       if (gameExtraGameArgsInput) gameExtraGameArgsInput.value = String(dl.extraGameArgs || "");
+      if (gamePerformanceProfileSelect) gamePerformanceProfileSelect.value = String(dl.performanceProfileId || "vanilla_fabric");
+    }
+
+    function normalizeLaunchOptions(raw) {
+      const src = raw && typeof raw === "object" ? raw : {};
+      const minMemoryMb = Math.max(512, Number.parseInt(String(src.minMemoryMb ?? 1024), 10) || 1024);
+      const maxMemoryMb = Math.max(minMemoryMb, Number.parseInt(String(src.maxMemoryMb ?? 2048), 10) || 2048);
+      return {
+        javaPath: String(src.javaPath || "").trim(),
+        minMemoryMb,
+        maxMemoryMb,
+        extraJvmArgs: String(src.extraJvmArgs || "").trim(),
+        extraGameArgs: String(src.extraGameArgs || "").trim(),
+        performanceProfileId: String(src.performanceProfileId || "vanilla_fabric").trim() || "vanilla_fabric",
+        instanceMode: String(src.instanceMode || "dedicated").trim() || "dedicated",
+      };
     }
 
     function buildLaunchOptionsFromInputs() {
       const int = (el, def) => Number.parseInt(String(el?.value || def), 10) || def;
-      return {
+      const dist = String(gameDistributionSelect?.value || "vanilla");
+      const selectedProfile = String(gamePerformanceProfileSelect?.value || "vanilla_fabric").trim() || "vanilla_fabric";
+      return normalizeLaunchOptions({
         javaPath: String(gameJavaPathInput?.value || "").trim(),
         minMemoryMb: int(gameMinMemoryInput, 1024),
         maxMemoryMb: int(gameMaxMemoryInput, 2048),
         extraJvmArgs: String(gameExtraJvmArgsInput?.value || "").trim(),
         extraGameArgs: String(gameExtraGameArgsInput?.value || "").trim(),
-      };
+        performanceProfileId: dist === "fabric" ? selectedProfile : "vanilla_fabric",
+        instanceMode: "dedicated",
+      });
     }
 
     async function persistLaunchOptionsToConfig() {
@@ -348,10 +376,12 @@
       next.launcher.downloads = dl;
       const lo = buildLaunchOptionsFromInputs();
       dl.javaPath = lo.javaPath;
-      dl.minMemoryMb = Math.max(512, lo.minMemoryMb);
-      dl.maxMemoryMb = Math.max(dl.minMemoryMb, lo.maxMemoryMb);
+      dl.minMemoryMb = lo.minMemoryMb;
+      dl.maxMemoryMb = lo.maxMemoryMb;
       dl.extraJvmArgs = lo.extraJvmArgs;
       dl.extraGameArgs = lo.extraGameArgs;
+      dl.performanceProfileId = lo.performanceProfileId;
+      dl.instanceMode = lo.instanceMode;
       await launcherAPI.saveConfig(next);
     }
 
@@ -582,7 +612,7 @@
       setGameStatus(formatRuntimeDiagnostics(st), Boolean(st?.stalled || st?.lastError || st?.lastExitCode !== null));
     }
 
-    async function ensureInstalledThenLaunch({ source, versionId, loaderVersion, authMode, username, javaPath, minMemoryMb, maxMemoryMb, extraJvmArgs, extraGameArgs }) {
+    async function ensureInstalledThenLaunch({ source, versionId, loaderVersion, authMode, username, javaPath, minMemoryMb, maxMemoryMb, extraJvmArgs, extraGameArgs, performanceProfileId, instanceMode }) {
       if (!launcherAPI) return { ok: false, error: "API no disponible." };
       if (source === "forge") return { ok: false, error: "Forge automático aún no está soportado en esta build." };
 
@@ -591,7 +621,7 @@
 
       if (!check.installed) {
         setGameStatus(`Instalando ${source}:${versionId} antes de lanzar...`);
-        const installRes = await launcherAPI.installVersion({ source, versionId, loaderVersion, authMode });
+        const installRes = await launcherAPI.installVersion({ source, versionId, loaderVersion, authMode, performanceProfileId, instanceMode });
         if (!installRes?.ok) return { ok: false, error: installRes?.error || "No se pudo iniciar instalación." };
         activeInstallId = installRes.installId || "";
         const waitRes = await waitInstallCompletion(activeInstallId);
@@ -602,10 +632,24 @@
 
       const launchVersionId = source === "fabric" && check?.profileId ? check.profileId : versionId;
       setGameStatus(`Lanzando ${launchVersionId}...`);
-      const launchRes = await launcherAPI.launchGame({ versionId: launchVersionId, authMode, username, javaPath, minMemoryMb, maxMemoryMb, extraJvmArgs, extraGameArgs });
+      const launchRes = await launcherAPI.launchGame({
+        source,
+        gameVersion: versionId,
+        loaderVersion,
+        performanceProfileId,
+        instanceMode,
+        versionId: launchVersionId,
+        authMode,
+        username,
+        javaPath,
+        minMemoryMb,
+        maxMemoryMb,
+        extraJvmArgs,
+        extraGameArgs,
+      });
       if (!launchRes?.ok) return { ok: false, error: launchRes?.error || "No se pudo lanzar el juego." };
       const runtimeCheck = await waitForRuntimeStable(8000, 4500);
-      return runtimeCheck.ok ? { ok: true, pid: runtimeCheck.pid || launchRes.pid } : runtimeCheck;
+      return runtimeCheck.ok ? { ok: true, pid: runtimeCheck.pid || launchRes.pid, mods: launchRes?.mods || null } : runtimeCheck;
     }
 
     async function launchSelectedGameFromUI() {
@@ -630,9 +674,20 @@
         maxMemoryMb: Math.max(lo.minMemoryMb, lo.maxMemoryMb),
         extraJvmArgs: lo.extraJvmArgs,
         extraGameArgs: lo.extraGameArgs,
+        performanceProfileId: lo.performanceProfileId,
+        instanceMode: lo.instanceMode,
       });
       if (!result.ok) return setGameStatus(result.error || "No se pudo lanzar.", true);
-      setGameStatus(`Juego iniciado (PID ${result.pid || "?"})`);
+      const installedCount = Number(result?.mods?.installed?.length || 0);
+      const skippedCount = Number(result?.mods?.skipped?.length || 0);
+      const coreState = result?.mods ? (result.mods.coreOk ? "core=OK" : "core=FAIL") : "";
+      const profilePart = result?.mods?.profileId ? `perfil=${result.mods.profileId}` : "";
+      const instancePart = result?.mods?.instancePath ? `instancia=${result.mods.instancePath}` : "";
+      const modsPart = result?.mods
+        ? `mods=${installedCount} skipped=${skippedCount} ${coreState}`.trim()
+        : "";
+      const details = [profilePart, instancePart, modsPart].filter(Boolean).join(" | ");
+      setGameStatus(`Juego iniciado (PID ${result.pid || "?"})${details ? ` | ${details}` : ""}`);
     }
 
     // ── Config form ──────────────────────────────────────────────────────────
@@ -678,14 +733,16 @@
       const b = base && typeof base === "object" ? base : {};
       const n = buildConfigFromForm();
       const lb = typeof b.launcher === "object" ? b.launcher : {};
+      const baseDownloads = typeof lb.downloads === "object" ? lb.downloads : {};
+      const mergedDownloads = normalizeLaunchOptions({
+        ...baseDownloads,
+        ...buildLaunchOptionsFromInputs(),
+      });
       return {
         ...b, clientId: n.clientId,
         launcher: {
           ...lb, ...n.launcher,
-          downloads: {
-            ...(typeof lb.downloads === "object" ? lb.downloads : {}),
-            javaPath: String(gameJavaPathInput?.value || lb.downloads?.javaPath || "").trim(),
-          },
+          downloads: mergedDownloads,
         },
       };
     }
@@ -885,7 +942,7 @@
       });
 
       // Persist launch options on any input change — consolidated.
-      [gameJavaPathInput, gameMinMemoryInput, gameMaxMemoryInput, gameExtraJvmArgsInput, gameExtraGameArgsInput].forEach((el) => {
+      [gameJavaPathInput, gameMinMemoryInput, gameMaxMemoryInput, gameExtraJvmArgsInput, gameExtraGameArgsInput, gamePerformanceProfileSelect].forEach((el) => {
         el?.addEventListener("change", persistLaunchOptionsToConfig);
       });
 

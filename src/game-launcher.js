@@ -61,6 +61,54 @@ function httpsGetBuffer(url, timeoutMs = 30000) {
 const fetchJson = async (url, timeoutMs = 30000) =>
   JSON.parse((await httpsGetBuffer(url, timeoutMs)).toString("utf8"));
 
+const MODRINTH_API = "https://api.modrinth.com/v2";
+const FABRIC_PERFORMANCE_PROFILE_ID = "fabric_performance_v1";
+const VANILLA_FABRIC_PROFILE_ID = "vanilla_fabric";
+const CORE_MODS = ["sodium", "lithium", "ferrite-core"];
+const FABRIC_PERFORMANCE_MODS = [
+  { modId: "sodium", projects: ["sodium"], displayName: "Sodium" },
+  { modId: "lithium", projects: ["lithium"], displayName: "Lithium" },
+  {
+    modId: "entity-culling",
+    projects: ["entityculling", "entity-culling"],
+    displayName: "Entity Culling",
+  },
+  {
+    modId: "ferrite-core",
+    projects: ["ferrite-core", "ferritecore"],
+    displayName: "FerriteCore",
+  },
+  { modId: "krypton", projects: ["krypton"], displayName: "Krypton" },
+
+  {
+    modId: "dynamic-fps",
+    projects: ["dynamic-fps", "dynamicfps"],
+    displayName: "Dynamic FPS",
+  },
+  {
+    modId: "immediatelyfast",
+    projects: ["immediatelyfast"],
+    displayName: "ImmediatelyFast",
+  },
+  { modId: "debugify", projects: ["debugify"], displayName: "Debugify" },
+  { modId: "iris", projects: ["iris"], displayName: "Iris" },
+  {
+    modId: "lambdynamiclights",
+    projects: ["lambdynamiclights"],
+    displayName: "LambDynamicLights",
+  },
+  { modId: "modmenu", projects: ["modmenu"], displayName: "Mod Menu" },
+  { modId: "fabric-api", projects: ["fabric-api"], displayName: "Fabric API" },
+  {
+    modId: "third-person-camera",
+    projects: [
+      "leawind-third-person",
+      "better-third-person",
+    ],
+    displayName: "Third Person Camera",
+  },
+];
+
 async function httpsRequestJson(
   url,
   { method = "GET", headers = {}, body = null, timeoutMs = 30000 } = {},
@@ -111,6 +159,26 @@ const fileExists = async (filePath) =>
     .access(filePath, fs.constants.F_OK)
     .then(() => true)
     .catch(() => false);
+
+async function isNonEmptyFile(filePath) {
+  try {
+    const st = await fsp.stat(filePath);
+    return st.isFile() && st.size > 0;
+  } catch {
+    return false;
+  }
+}
+
+async function isReadableJsonFile(filePath) {
+  if (!(await isNonEmptyFile(filePath))) return false;
+  try {
+    const raw = await fsp.readFile(filePath, "utf8");
+    const parsed = JSON.parse(raw);
+    return Boolean(parsed && typeof parsed === "object");
+  } catch {
+    return false;
+  }
+}
 
 async function verifyFile(filePath, expectedSha1, expectedSize) {
   if (!(await fileExists(filePath))) return false;
@@ -319,6 +387,22 @@ function parseLaunchArgsString(raw) {
   return out;
 }
 
+function isConflictingEncodingArg(arg) {
+  const value = String(arg || "")
+    .trim()
+    .toLowerCase();
+  return (
+    value.startsWith("-dfile.encoding=") ||
+    value.startsWith("-dclient.encoding.override=")
+  );
+}
+
+function stripConflictingEncodingArgs(args) {
+  return (Array.isArray(args) ? args : []).filter(
+    (arg) => !isConflictingEncodingArg(arg),
+  );
+}
+
 function parseLibraryNameParts(name) {
   const [group = "", artifact = "", version = "", classifier = ""] = String(
     name || "",
@@ -449,6 +533,240 @@ class GameLauncherService {
       process.env.APPDATA || path.join(os.homedir(), "AppData", "Roaming"),
       ".minecraft",
     );
+  }
+
+  getPerformanceProfileDefinitions() {
+    return {
+      [VANILLA_FABRIC_PROFILE_ID]: {
+        id: VANILLA_FABRIC_PROFILE_ID,
+        name: "Vanilla Fabric",
+        enabled: true,
+        mods: [],
+      },
+      [FABRIC_PERFORMANCE_PROFILE_ID]: {
+        id: FABRIC_PERFORMANCE_PROFILE_ID,
+        name: "Fabric Rendimiento",
+        enabled: true,
+        mods: FABRIC_PERFORMANCE_MODS,
+      },
+    };
+  }
+
+  getPerformanceProfileConfig(profileId) {
+    const cfg = this.loadConfig() || {};
+    const profiles = cfg?.launcher?.downloads?.performanceProfiles;
+    return profiles && typeof profiles === "object"
+      ? profiles[profileId] || {}
+      : {};
+  }
+
+  getInstancePath({
+    profileId = VANILLA_FABRIC_PROFILE_ID,
+    gameVersion = "",
+    loaderVersion = "",
+  } = {}) {
+    const minecraftDir = this.getMinecraftDir();
+    const normalizedProfile =
+      String(profileId || VANILLA_FABRIC_PROFILE_ID).trim() ||
+      VANILLA_FABRIC_PROFILE_ID;
+    const safeVersion = String(gameVersion || "unknown").replace(
+      /[^\w.-]/g,
+      "_",
+    );
+    const safeLoader = String(loaderVersion || "unknown").replace(
+      /[^\w.-]/g,
+      "_",
+    );
+    if (normalizedProfile === VANILLA_FABRIC_PROFILE_ID) return minecraftDir;
+    const profileCfg = this.getPerformanceProfileConfig(normalizedProfile);
+    const customBase = String(profileCfg?.instanceDir || "").trim();
+    const base =
+      customBase || path.join(minecraftDir, "instances", "fabric-performance");
+    return path.join(base, `${safeVersion}-${safeLoader}`);
+  }
+
+  async resolvePerformanceMods({
+    gameVersion = "",
+    loaderVersion = "",
+    profileId = VANILLA_FABRIC_PROFILE_ID,
+  } = {}) {
+    const defs = this.getPerformanceProfileDefinitions();
+    const profile = defs[profileId] || defs[VANILLA_FABRIC_PROFILE_ID];
+    if (!profile || !Array.isArray(profile.mods) || !profile.mods.length) {
+      return { resolved: [], skipped: [] };
+    }
+
+    const resolved = [];
+    const skipped = [];
+    for (const mod of profile.mods) {
+      const candidates =
+        Array.isArray(mod.projects) && mod.projects.length
+          ? mod.projects
+          : [String(mod.project || "").trim()].filter(Boolean);
+      let resolvedEntry = null;
+      let lastError = "";
+      for (const candidate of candidates) {
+        try {
+          const versions = await fetchJson(
+            `${MODRINTH_API}/project/${encodeURIComponent(candidate)}/version?loaders=${encodeURIComponent(JSON.stringify(["fabric"]))}&game_versions=${encodeURIComponent(JSON.stringify([gameVersion]))}`,
+          );
+          const stable = Array.isArray(versions)
+            ? versions.filter(
+                (v) => String(v.version_type || "").toLowerCase() === "release",
+              )
+            : [];
+          const sorted = stable.sort((a, b) => {
+            const da = Date.parse(String(a.date_published || 0));
+            const db = Date.parse(String(b.date_published || 0));
+            return db - da;
+          });
+          const selected = sorted[0];
+          if (!selected) {
+            lastError = `No stable release in ${candidate}`;
+            continue;
+          }
+          const files = Array.isArray(selected.files) ? selected.files : [];
+          const file = files.find((f) => f.primary) || files[0];
+          if (!file?.url || !file?.filename) {
+            lastError = `No downloadable file in ${candidate}`;
+            continue;
+          }
+          resolvedEntry = {
+            modId: mod.modId,
+            project: candidate,
+            displayName: mod.displayName,
+            versionId: String(selected.id || ""),
+            versionNumber: String(selected.version_number || ""),
+            filename: String(file.filename || ""),
+            url: String(file.url || ""),
+            sha1: String(file?.hashes?.sha1 || ""),
+            size: Number(file?.size || 0),
+            gameVersion: String(gameVersion || ""),
+            loaderVersion: String(loaderVersion || ""),
+          };
+          break;
+        } catch (error) {
+          lastError = String(error?.message || error || "unknown_error");
+        }
+      }
+      if (resolvedEntry) resolved.push(resolvedEntry);
+      else {
+        skipped.push({
+          modId: mod.modId,
+          displayName: mod.displayName,
+          reason: lastError || "no_compatible_release",
+          candidates,
+        });
+      }
+    }
+    return { resolved, skipped };
+  }
+
+  async installPerformanceMods({
+    instancePath,
+    profileId = VANILLA_FABRIC_PROFILE_ID,
+    gameVersion = "",
+    loaderVersion = "",
+    signal = null,
+    installId = "",
+  } = {}) {
+    if (profileId === VANILLA_FABRIC_PROFILE_ID) {
+      return {
+        profileId,
+        instancePath,
+        installed: [],
+        skipped: [],
+        coreOk: true,
+        lockPath: "",
+      };
+    }
+    const modResolution = await this.resolvePerformanceMods({
+      gameVersion,
+      loaderVersion,
+      profileId,
+    });
+    const mods = Array.isArray(modResolution?.resolved)
+      ? modResolution.resolved
+      : [];
+    const skipped = Array.isArray(modResolution?.skipped)
+      ? modResolution.skipped
+      : [];
+    const modsDir = path.join(instancePath, "mods");
+    await ensureDir(modsDir);
+    const lockPath = path.join(instancePath, "mods.lock.json");
+    const lock = {
+      profileId,
+      gameVersion,
+      loaderVersion,
+      channel: "stable",
+      generatedAt: new Date().toISOString(),
+      mods,
+      skipped,
+    };
+
+    const managedPrefixes = new Set(mods.map((m) => `${m.modId}-`));
+    const existing = await fsp.readdir(modsDir).catch(() => []);
+    for (const fileName of existing) {
+      const lower = String(fileName).toLowerCase();
+      const shouldDelete =
+        [...managedPrefixes].some((prefix) => lower.startsWith(prefix)) ||
+        mods.some((m) => lower === m.filename.toLowerCase());
+      if (shouldDelete) {
+        await fsp
+          .rm(path.join(modsDir, fileName), { force: true })
+          .catch(() => {});
+      }
+    }
+
+    if (installId) {
+      this.emitInstallUpdate(installId, {
+        phase: "mods",
+        message: "Syncing Fabric performance mods...",
+      });
+    }
+    for (let i = 0; i < mods.length; i += 1) {
+      const mod = mods[i];
+      if (signal?.aborted) throw new Error("Installation cancelled.");
+      await downloadFileWithVerify(mod.url, path.join(modsDir, mod.filename), {
+        sha1: mod.sha1 || "",
+        size: Number(mod.size || 0) || -1,
+        signal,
+      });
+      if (installId) {
+        this.emitInstallUpdate(installId, {
+          phase: "mods",
+          progress: 95 + Math.round(((i + 1) / mods.length) * 5),
+          message: `Installed ${mod.displayName} ${mod.versionNumber}`,
+        });
+      }
+    }
+    await fsp.writeFile(lockPath, JSON.stringify(lock, null, 2), "utf8");
+    const installedIds = new Set(mods.map((m) => String(m.modId || "")));
+    const coreMissing = CORE_MODS.filter((id) => !installedIds.has(id));
+    return {
+      profileId,
+      instancePath,
+      installed: mods,
+      skipped,
+      coreOk: coreMissing.length === 0,
+      coreMissing,
+      lockPath,
+    };
+  }
+
+  isPerformanceLockCompatible({
+    lock,
+    profileId,
+    gameVersion,
+    loaderVersion,
+  } = {}) {
+    if (!lock || typeof lock !== "object") return false;
+    if (String(lock.profileId || "") !== String(profileId || "")) return false;
+    if (String(lock.gameVersion || "") !== String(gameVersion || "")) return false;
+    if (String(lock.loaderVersion || "") !== String(loaderVersion || ""))
+      return false;
+    const mods = Array.isArray(lock.mods) ? lock.mods : [];
+    return mods.length > 0;
   }
 
   getCatalogCacheFile() {
@@ -735,6 +1053,8 @@ class GameLauncherService {
     versionId = "",
     authMode = "offline",
     loaderVersion = "",
+    performanceProfileId = VANILLA_FABRIC_PROFILE_ID,
+    instanceMode = "dedicated",
   } = {}) {
     const cleanSource = String(source || "vanilla").toLowerCase();
     const cleanVersion = String(versionId || "").trim();
@@ -785,6 +1105,27 @@ class GameLauncherService {
             installId,
             controller.signal,
           );
+          const profileId =
+            String(performanceProfileId || VANILLA_FABRIC_PROFILE_ID).trim() ||
+            VANILLA_FABRIC_PROFILE_ID;
+          if (
+            profileId !== VANILLA_FABRIC_PROFILE_ID &&
+            String(instanceMode || "dedicated") === "dedicated"
+          ) {
+            const instancePath = this.getInstancePath({
+              profileId,
+              gameVersion: cleanVersion,
+              loaderVersion,
+            });
+            await this.installPerformanceMods({
+              instancePath,
+              profileId,
+              gameVersion: cleanVersion,
+              loaderVersion,
+              signal: controller.signal,
+              installId,
+            });
+          }
         } else if (cleanSource === "forge") {
           throw new Error(
             "Automatic Forge installation not yet implemented in this build.",
@@ -1080,6 +1421,9 @@ class GameLauncherService {
 
   async launchGame({
     versionId = "",
+    source = "vanilla",
+    gameVersion = "",
+    loaderVersion = "",
     username = "Player",
     authMode = "offline",
     javaPath = "",
@@ -1087,6 +1431,8 @@ class GameLauncherService {
     maxMemoryMb = 0,
     extraJvmArgs = "",
     extraGameArgs = "",
+    performanceProfileId = VANILLA_FABRIC_PROFILE_ID,
+    instanceMode = "dedicated",
   } = {}) {
     const cleanVersion = String(versionId || "").trim();
     if (!cleanVersion)
@@ -1115,6 +1461,89 @@ class GameLauncherService {
 
     const resolved = await this.resolveVersionRuntime(cleanVersion);
     const minecraftDir = resolved.minecraftDir;
+    const cleanSource = String(source || "vanilla").toLowerCase();
+    const effectiveGameVersion =
+      String(gameVersion || "").trim() || cleanVersion;
+    const cleanLoaderVersion = String(loaderVersion || "").trim();
+    const cleanProfileId =
+      String(performanceProfileId || VANILLA_FABRIC_PROFILE_ID).trim() ||
+      VANILLA_FABRIC_PROFILE_ID;
+    let runtimeGameDir = minecraftDir;
+    let modsReport = null;
+    if (
+      cleanSource === "fabric" &&
+      String(instanceMode || "dedicated") === "dedicated"
+    ) {
+      runtimeGameDir = this.getInstancePath({
+        profileId: cleanProfileId,
+        gameVersion: effectiveGameVersion,
+        loaderVersion: cleanLoaderVersion,
+      });
+      await ensureDir(runtimeGameDir);
+      const lockPath = path.join(runtimeGameDir, "mods.lock.json");
+      let existingLock = null;
+      try {
+        existingLock = JSON.parse(await fsp.readFile(lockPath, "utf8"));
+      } catch {
+        existingLock = null;
+      }
+      const lockCompatible = this.isPerformanceLockCompatible({
+        lock: existingLock,
+        profileId: cleanProfileId,
+        gameVersion: effectiveGameVersion,
+        loaderVersion: cleanLoaderVersion,
+      });
+      if (lockCompatible) {
+        modsReport = {
+          profileId: cleanProfileId,
+          instancePath: runtimeGameDir,
+          installed: Array.isArray(existingLock.mods) ? existingLock.mods : [],
+          skipped: Array.isArray(existingLock.skipped) ? existingLock.skipped : [],
+          lockPath,
+        };
+      } else {
+        modsReport = await this.installPerformanceMods({
+          instancePath: runtimeGameDir,
+          profileId: cleanProfileId,
+          gameVersion: effectiveGameVersion,
+          loaderVersion: cleanLoaderVersion,
+          signal: null,
+        });
+      }
+
+      if (cleanProfileId === FABRIC_PERFORMANCE_PROFILE_ID) {
+        const installedIds = new Set(
+          (modsReport?.installed || []).map((m) => String(m.modId || "")),
+        );
+        const coreMissing = CORE_MODS.filter((id) => !installedIds.has(id));
+        const skippedById = new Map(
+          (modsReport?.skipped || []).map((s) => [String(s.modId || ""), s]),
+        );
+        if (coreMissing.length > 0) {
+          const details = coreMissing
+            .map((id) => {
+              const sk = skippedById.get(id);
+              return sk
+                ? `${id}: ${String(sk.reason || "not_installed")}`
+                : `${id}: not_installed`;
+            })
+            .join(" | ");
+          return {
+            ok: false,
+            error: `Fabric rendimiento no aplicado (mods núcleo faltantes): ${coreMissing.join(", ")}. Detalle: ${details}. Reintenta instalación.`,
+            mods: {
+              installed: modsReport?.installed || [],
+              skipped: modsReport?.skipped || [],
+              coreOk: false,
+              coreMissing,
+              instancePath: runtimeGameDir,
+              profileId: cleanProfileId,
+            },
+          };
+        }
+        modsReport.coreOk = true;
+      }
+    }
     const versionMeta = resolved.mergedMeta;
     const libraries = Array.isArray(versionMeta.libraries)
       ? versionMeta.libraries
@@ -1172,7 +1601,7 @@ class GameLauncherService {
       library_directory: librariesDir,
       auth_player_name: username,
       version_name: cleanVersion,
-      game_directory: minecraftDir,
+      game_directory: runtimeGameDir,
       assets_root: path.join(minecraftDir, "assets"),
       assets_index_name: assetIndexId,
       auth_uuid: authProfile.uuid,
@@ -1212,12 +1641,9 @@ class GameLauncherService {
     const effectiveExtraGameArgs = String(
       extraGameArgs || cfgDownloads.extraGameArgs || "",
     ).trim();
-
     const jvmArgs = [
       `-Xms${effectiveMinMemory}M`,
       `-Xmx${effectiveMaxMemory}M`,
-      "-Dfile.encoding=UTF-8",
-      "-Dclient.encoding.override=UTF-8",
     ];
     if (Array.isArray(versionMeta.arguments?.jvm)) {
       for (const entry of versionMeta.arguments.jvm) {
@@ -1272,7 +1698,10 @@ class GameLauncherService {
     }
 
     if (effectiveExtraJvmArgs) {
-      jvmArgs.push(...parseLaunchArgsString(effectiveExtraJvmArgs));
+      const parsedExtraJvmArgs = stripConflictingEncodingArgs(
+        parseLaunchArgsString(effectiveExtraJvmArgs),
+      );
+      jvmArgs.push(...parsedExtraJvmArgs);
     }
     if (effectiveExtraGameArgs) {
       gameArgs.push(...parseLaunchArgsString(effectiveExtraGameArgs));
@@ -1291,7 +1720,7 @@ class GameLauncherService {
       const started = await this.tryLaunchProcess({
         javaExec,
         args,
-        minecraftDir,
+        minecraftDir: runtimeGameDir,
       });
       if (started.ok) {
         this.lastGameStatus.javaPathTried = [...tried];
@@ -1303,6 +1732,18 @@ class GameLauncherService {
           pid: started.pid,
           javaPath: javaExec,
           javaPathTried: tried,
+          mods: modsReport
+            ? {
+                installed: modsReport.installed || [],
+                skipped: modsReport.skipped || [],
+                coreOk:
+                  typeof modsReport.coreOk === "boolean"
+                    ? modsReport.coreOk
+                    : true,
+                instancePath: modsReport.instancePath || runtimeGameDir,
+                profileId: modsReport.profileId || cleanProfileId,
+              }
+            : null,
         };
       }
       this.lastGameStatus.lastError = started.error || "Failed to start.";
@@ -1594,9 +2035,29 @@ class GameLauncherService {
       const versionFolder = path.join(versionsDir, cleanVersion);
       const versionJsonPath = path.join(versionFolder, `${cleanVersion}.json`);
       const versionJarPath = path.join(versionFolder, `${cleanVersion}.jar`);
-      const installed =
-        (await fileExists(versionJsonPath)) &&
-        (await fileExists(versionJarPath));
+      const installedMeta = await isReadableJsonFile(versionJsonPath);
+      const installedJar = await isNonEmptyFile(versionJarPath);
+      let installedAssetsIndex = true;
+      if (installedMeta) {
+        try {
+          const versionMeta = JSON.parse(
+            await fsp.readFile(versionJsonPath, "utf8"),
+          );
+          const assetIndexId = String(versionMeta?.assetIndex?.id || "").trim();
+          if (assetIndexId) {
+            const assetIndexPath = path.join(
+              minecraftDir,
+              "assets",
+              "indexes",
+              `${assetIndexId}.json`,
+            );
+            installedAssetsIndex = await isReadableJsonFile(assetIndexPath);
+          }
+        } catch {
+          installedAssetsIndex = false;
+        }
+      }
+      const installed = installedMeta && installedJar && installedAssetsIndex;
       return { ok: true, installed };
     }
 
@@ -1610,9 +2071,9 @@ class GameLauncherService {
       const baseJsonPath = path.join(baseFolder, `${cleanVersion}.json`);
       const baseJarPath = path.join(baseFolder, `${cleanVersion}.jar`);
       const installed =
-        (await fileExists(profileJsonPath)) &&
-        (await fileExists(baseJsonPath)) &&
-        (await fileExists(baseJarPath));
+        (await isReadableJsonFile(profileJsonPath)) &&
+        (await isReadableJsonFile(baseJsonPath)) &&
+        (await isNonEmptyFile(baseJarPath));
       return { ok: true, installed, profileId };
     }
 

@@ -21,9 +21,18 @@
       "minecraftDir": "",
       "javaPath": "C:\\Program Files\\Eclipse Adoptium\\jdk-21.0.8.9-hotspot\\bin\\javaw.exe",
       "minMemoryMb": 1024,
-      "maxMemoryMb": 2048,
+      "maxMemoryMb": 4096,
       "extraJvmArgs": "",
-      "extraGameArgs": ""
+      "extraGameArgs": "",
+      "performanceProfileId": "fabric_performance_v1",
+      "instanceMode": "dedicated",
+      "performanceProfiles": {
+        "fabric_performance_v1": {
+          "enabled": true,
+          "channel": "stable",
+          "instanceDir": ""
+        }
+      }
     }
   },
   "auth": {

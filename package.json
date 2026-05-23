@@ -16,6 +16,7 @@
   "description": "Offline/no premium Minecraft launcher with Mineflayer and Discord Rich Presence",
   "dependencies": {
     "@azure/msal-node": "^3.8.1",
+    "@sentry/electron": "^7.13.0",
     "ansi-to-html": "^0.7.2",
     "discord-rpc": "^4.0.1",
     "fs": "^0.0.1-security",
@@ -41,6 +42,9 @@
       "**/*",
       "!dist/**",
       "!node_modules/.cache/**",
+      "!node_modules/minecraft-data/minecraft-data/data/bedrock/**",
+      "!node_modules/**/{test,tests,__tests__,example,examples,docs,doc,benchmark,benchmarks,coverage}/**",
+      "!node_modules/**/*.map",
       "!mcbeta-context.md",
       "!.git/**"
     ],

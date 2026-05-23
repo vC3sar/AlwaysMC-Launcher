@@ -1,4 +1,5 @@
-const { app, BrowserWindow } = require("electron");
+const { app, BrowserWindow, dialog } = require("electron");
+const Sentry = require("@sentry/electron/main");
 const { GameLauncherService } = require("./src/game-launcher");
 const configManager = require("./src/main/config");
 const windowManager = require("./src/main/window");
@@ -6,6 +7,21 @@ const botManager = require("./src/main/bot");
 const { setupIpcHandlers } = require("./src/main/ipc");
 
 console.log("[Main] main.js - main process is running");
+
+const SENTRY_DSN = "https://502f8bb23f8a93c42a22eafe1d9aedde@o4511440032890880.ingest.us.sentry.io/4511440044621824";
+Sentry.init({
+  dsn: SENTRY_DSN,
+  environment: app.isPackaged ? "production" : "development",
+  debug: !app.isPackaged || process.env.SENTRY_DEBUG === "1",
+  attachStacktrace: true,
+  tracesSampleRate: 1.0,
+  initialScope: {
+    tags: {
+      process: "main",
+      app_name: "mc-beta",
+    },
+  },
+});
 
 function isKeepAliveTimeoutError(errorLike) {
   const message = String(errorLike?.message || errorLike || "").toLowerCase();
@@ -15,36 +31,50 @@ function isKeepAliveTimeoutError(errorLike) {
 let gameLauncher = null;
 
 app.whenReady().then(() => {
-  console.log("[Main] app.whenReady()");
+  try {
+    console.log("[Main] app.whenReady()");
 
-  // Inicializa la config por defecto
-  const initialCfg = configManager.mergeLauncherDefaults(
-    configManager.loadConfig(),
-  );
-  configManager.saveConfig(initialCfg);
+    // Inicializa la config por defecto
+    const initialCfg = configManager.mergeLauncherDefaults(
+      configManager.loadConfig(),
+    );
+    configManager.saveConfig(initialCfg);
 
-  // Instancia el servicio del launcher
-  gameLauncher = new GameLauncherService({
-    appRoot: __dirname,
-    loadConfig: () =>
-      configManager.mergeLauncherDefaults(configManager.loadConfig()),
-    saveConfig: (cfg) =>
-      configManager.saveConfig(configManager.mergeLauncherDefaults(cfg)),
-    stopBotSession: () => botManager.stopBotSession(),
-    onInstallUpdate: () => {},
-  });
+    // Instancia el servicio del launcher
+    gameLauncher = new GameLauncherService({
+      appRoot: __dirname,
+      loadConfig: () =>
+        configManager.mergeLauncherDefaults(configManager.loadConfig()),
+      saveConfig: (cfg) =>
+        configManager.saveConfig(configManager.mergeLauncherDefaults(cfg)),
+      stopBotSession: () => botManager.stopBotSession(),
+      onInstallUpdate: () => {},
+    });
 
-  // Registra todos los handlers de IPC
-  setupIpcHandlers(gameLauncher);
+    // Registra todos los handlers de IPC
+    setupIpcHandlers(gameLauncher);
 
-  // Crea la ventana principal
-  windowManager.createWindow();
+    // Crea la ventana principal
+    windowManager.createWindow();
 
-  app.on("activate", () => {
-    if (BrowserWindow.getAllWindows().length === 0) {
-      windowManager.createWindow();
-    }
-  });
+    app.on("activate", () => {
+      if (BrowserWindow.getAllWindows().length === 0) {
+        windowManager.createWindow();
+      }
+    });
+  } catch (error) {
+    const message = error?.message || String(error);
+    console.error("[Main] startup failed:", error);
+    Sentry.captureException(error, {
+      tags: { stage: "startup" },
+      level: "fatal",
+    });
+    dialog.showErrorBox(
+      "AlwaysMC Launcher - Startup Error",
+      `La app no pudo iniciar.\n\n${message}`,
+    );
+    app.quit();
+  }
 });
 
 app.on("window-all-closed", () => {
@@ -57,6 +87,10 @@ process.on("uncaughtException", (error) => {
     return;
   }
   console.error("[Main] uncaughtException:", error);
+  Sentry.captureException(error, {
+    tags: { handler: "uncaughtException" },
+    level: "fatal",
+  });
 });
 
 process.on("unhandledRejection", (reason) => {
@@ -65,4 +99,12 @@ process.on("unhandledRejection", (reason) => {
     return;
   }
   console.error("[Main] unhandledRejection:", reason);
+  Sentry.captureException(
+    reason instanceof Error ? reason : new Error(String(reason)),
+    {
+      tags: { handler: "unhandledRejection" },
+      level: "error",
+      extra: { reason },
+    },
+  );
 });
