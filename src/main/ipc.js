@@ -13,6 +13,33 @@ function broadcastLanguageChanged(language) {
 }
 
 function setupIpcHandlers(gameLauncher) {
+  ipcMain.on("sentry:rendererError", (_, payload) => {
+    try {
+      const Sentry = require("@sentry/electron/main");
+      const kind = String(payload?.kind || "error");
+      const where = String(payload?.where || "renderer");
+      const message = String(payload?.message || "Unknown renderer error");
+      if (kind === "unhandledrejection" || kind === "error") {
+        Sentry.captureException(new Error(message), {
+          level: "error",
+          tags: { process: "renderer", where, kind },
+          extra: {
+            stack: payload?.stack || "",
+            href: payload?.href || "",
+            raw: payload?.raw ?? null,
+          },
+        });
+      } else {
+        Sentry.captureMessage(message, {
+          level: "warning",
+          tags: { process: "renderer", where, kind },
+        });
+      }
+    } catch (error) {
+      console.error("[IPC] sentry:rendererError failed", error);
+    }
+  });
+
   // Config & Profiles
   ipcMain.handle("launcher:getLastProfile", () => configManager.loadProfile());
 

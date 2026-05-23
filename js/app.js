@@ -16,6 +16,30 @@ let inputHistoryIndex = -1;
 let inputDraft = "";
 const hiddenBaseNames = new Set();
 
+function reportRendererError(kind, errorLike, where = "app") {
+  try {
+    const error = errorLike instanceof Error ? errorLike : new Error(String(errorLike));
+    launcherAPI?.reportRendererError?.({
+      kind,
+      where,
+      message: error.message || String(errorLike),
+      stack: error.stack || "",
+      href: window.location.href,
+      raw: String(errorLike ?? ""),
+    });
+  } catch { }
+}
+
+window.addEventListener("error", (event) => {
+  if (!event?.error) return;
+  reportRendererError("error", event.error, "app.window.error");
+});
+
+window.addEventListener("unhandledrejection", (event) => {
+  const reason = event?.reason;
+  reportRendererError("unhandledrejection", reason instanceof Error ? reason : new Error(String(reason)), "app.window.unhandledrejection");
+});
+
 // ── DOM refs ──────────────────────────────────────────────────────────────────
 const $ = (id) => document.getElementById(id);
 const chat = $("chat");

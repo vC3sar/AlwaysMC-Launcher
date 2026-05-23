@@ -1,5 +1,11 @@
 const { app, BrowserWindow, Menu } = require("electron");
 const path = require("path");
+let SentryMain = null;
+try {
+  SentryMain = require("@sentry/electron/main");
+} catch {
+  SentryMain = null;
+}
 
 class WindowManager {
   constructor() {
@@ -8,7 +14,7 @@ class WindowManager {
 
   createWindow() {
     const win = new BrowserWindow({
-      show: false,
+      show: true,
       width: 1360,
       height: 860,
       minWidth: 1100,
@@ -22,6 +28,38 @@ class WindowManager {
       },
     });
     this.mainWindow = win;
+
+    // Failsafe: evita que la app quede "invisible" si el renderer/preload falla
+    // antes de enviar launcher:menuReady.
+    setTimeout(() => {
+      if (!win.isDestroyed() && !win.isVisible()) {
+        console.warn("[Window] Failsafe show after 5s (menuReady not received).");
+        win.show();
+      }
+    }, 5000);
+
+    win.webContents.on("preload-error", (_, preloadPath, error) => {
+      console.error("[Window] preload-error:", preloadPath, error);
+      SentryMain?.captureException?.(
+        error instanceof Error ? error : new Error(String(error)),
+        {
+          level: "error",
+          tags: { process: "renderer", where: "preload-error" },
+          extra: { preloadPath },
+        },
+      );
+      if (!win.isDestroyed() && !win.isVisible()) win.show();
+    });
+
+    win.webContents.on("did-fail-load", (_, code, desc, url) => {
+      const msg = `[Window] did-fail-load code=${code} desc=${desc} url=${url}`;
+      console.error(msg);
+      SentryMain?.captureMessage?.(msg, {
+        level: "error",
+        tags: { process: "renderer", where: "did-fail-load" },
+      });
+      if (!win.isDestroyed() && !win.isVisible()) win.show();
+    });
 
     win.loadFile(path.join(__dirname, "../../launcher.html"));
 

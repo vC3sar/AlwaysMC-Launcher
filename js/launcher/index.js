@@ -3,6 +3,27 @@
 
   NS.init = function initLauncherApp() {
     var launcherAPI = window.launcherAPI || null;
+    function reportRendererError(kind, errorLike, where = "launcher") {
+      try {
+        const error = errorLike instanceof Error ? errorLike : new Error(String(errorLike));
+        launcherAPI?.reportRendererError?.({
+          kind,
+          where,
+          message: error.message || String(errorLike),
+          stack: error.stack || "",
+          href: window.location.href,
+          raw: String(errorLike ?? ""),
+        });
+      } catch { }
+    }
+    window.addEventListener("error", (event) => {
+      if (!event?.error) return;
+      reportRendererError("error", event.error, "launcher.window.error");
+    });
+    window.addEventListener("unhandledrejection", (event) => {
+      const reason = event?.reason;
+      reportRendererError("unhandledrejection", reason instanceof Error ? reason : new Error(String(reason)), "launcher.window.unhandledrejection");
+    });
     const i18n = window.MCSharedI18n;
     const t = (key, params) => (i18n?.t ? i18n.t(key, params) : key);
     const translateError = (res, fallbackKey = "") => {
