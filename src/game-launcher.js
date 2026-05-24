@@ -22,6 +22,25 @@ const {
   recommendedJavaMajorForVersion,
 } = require("./game-launcher/version-java");
 
+function scoreJavaCandidate(candidate) {
+  const major = detectJavaMajorFromPathOrLabel(
+    `${candidate?.label || ""} ${candidate?.path || ""}`,
+  );
+  const source = String(candidate?.source || "").toLowerCase();
+  let sourceScore = 0;
+  if (source === "managed") sourceScore = 300;
+  else if (source === "java_home") sourceScore = 200;
+  else if (source === "system") sourceScore = 100;
+  return sourceScore + (Number.isFinite(major) ? major : 0);
+}
+
+function normalizeJavaArch(arch) {
+  const raw = String(arch || "").toLowerCase();
+  if (raw === "x64") return "x64";
+  if (raw === "arm64") return "aarch64";
+  return "x64";
+}
+
 function httpsGetBuffer(url, timeoutMs = 30000) {
   return new Promise((resolve, reject) => {
     const req = https.get(
@@ -535,6 +554,100 @@ class GameLauncherService {
     );
   }
 
+  getAppRuntimeDir() {
+    return path.join(
+      process.env.APPDATA || path.join(os.homedir(), "AppData", "Roaming"),
+      "MC-BETA",
+      "runtime",
+      "java",
+    );
+  }
+
+  getManagedRuntimeFolderName(javaMajor) {
+    const arch = normalizeJavaArch(process.arch);
+    return `temurin-${Number(javaMajor)}-${arch}`;
+  }
+
+  getManagedRuntimePath(javaMajor) {
+    return path.join(
+      this.getAppRuntimeDir(),
+      this.getManagedRuntimeFolderName(javaMajor),
+    );
+  }
+
+  async ensureManagedJavaRuntime(javaMajor) {
+    const major = Number.parseInt(String(javaMajor || 0), 10);
+    if (![17, 21].includes(major)) return { ok: false, reason: "unsupported_major" };
+
+    const targetRoot = this.getManagedRuntimePath(major);
+    const expectedJavaw = path.join(targetRoot, "bin", "javaw.exe");
+    if (await fileExists(expectedJavaw)) return { ok: true, javaPath: expectedJavaw };
+
+    try {
+      await ensureDir(this.getAppRuntimeDir());
+      const arch = normalizeJavaArch(process.arch);
+      const apiUrl =
+        `https://api.adoptium.net/v3/assets/latest/${major}/hotspot` +
+        `?architecture=${encodeURIComponent(arch)}` +
+        "&heap_size=normal" +
+        "&image_type=jre" +
+        "&jvm_impl=hotspot" +
+        "&os=windows" +
+        "&project=jdk" +
+        "&vendor=eclipse";
+      const assets = await fetchJson(apiUrl, 30000);
+      const first = Array.isArray(assets) ? assets[0] : null;
+      const pkg = first?.binary?.package || null;
+      const zipUrl = String(pkg?.link || "").trim();
+      const zipName = String(pkg?.name || "").trim() || `temurin-${major}.zip`;
+      if (!zipUrl) return { ok: false, reason: "no_download_link" };
+
+      const zipPath = path.join(this.getAppRuntimeDir(), `${zipName}.part.zip`);
+      const tempExtract = path.join(this.getAppRuntimeDir(), `${this.getManagedRuntimeFolderName(major)}.extracting`);
+      await downloadFileWithVerify(zipUrl, zipPath, {
+        sha1: String(pkg?.checksum || "").trim(),
+        size: Number(pkg?.size || -1),
+        retries: 2,
+      });
+
+      await fsp.rm(tempExtract, { recursive: true, force: true }).catch(() => {});
+      await ensureDir(tempExtract);
+      const ps = spawnSync(
+        "powershell.exe",
+        [
+          "-NoProfile",
+          "-ExecutionPolicy",
+          "Bypass",
+          "-Command",
+          `Expand-Archive -LiteralPath '${zipPath.replace(/'/g, "''")}' -DestinationPath '${tempExtract.replace(/'/g, "''")}' -Force`,
+        ],
+        { encoding: "utf8" },
+      );
+      if (ps.status !== 0) {
+        return {
+          ok: false,
+          reason: "extract_failed",
+          error: String(ps.stderr || ps.stdout || "").trim(),
+        };
+      }
+
+      const topEntries = await fsp.readdir(tempExtract, { withFileTypes: true }).catch(() => []);
+      const topDir = topEntries.find((e) => e.isDirectory());
+      const sourceDir = topDir ? path.join(tempExtract, topDir.name) : tempExtract;
+
+      await fsp.rm(targetRoot, { recursive: true, force: true }).catch(() => {});
+      await fsp.rename(sourceDir, targetRoot);
+      await fsp.rm(tempExtract, { recursive: true, force: true }).catch(() => {});
+      await fsp.rm(zipPath, { force: true }).catch(() => {});
+
+      return (await fileExists(expectedJavaw))
+        ? { ok: true, javaPath: expectedJavaw }
+        : { ok: false, reason: "java_not_found_after_extract" };
+    } catch (error) {
+      return { ok: false, reason: "download_failed", error: String(error?.message || error) };
+    }
+  }
+
   getPerformanceProfileDefinitions() {
     return {
       [VANILLA_FABRIC_PROFILE_ID]: {
@@ -895,18 +1008,44 @@ class GameLauncherService {
   async detectJavaRuntimes() {
     const candidates = [];
     const seen = new Set();
-    const add = (label, p) => {
+    const add = (label, p, source = "system") => {
       if (!p) return;
       const normalized = path.normalize(p);
       if (seen.has(normalized)) return;
       seen.add(normalized);
-      candidates.push({ label, path: normalized });
+      candidates.push({ label, path: normalized, source });
     };
+
+    const collectManagedJavaBins = async (rootDir) => {
+      const stack = [rootDir];
+      while (stack.length > 0) {
+        const current = stack.pop();
+        if (!current || !fs.existsSync(current)) continue;
+        let entries = [];
+        try {
+          entries = await fsp.readdir(current, { withFileTypes: true });
+        } catch {
+          continue;
+        }
+        for (const entry of entries) {
+          const full = path.join(current, entry.name);
+          if (!entry.isDirectory()) continue;
+          if (entry.name.toLowerCase() === "bin") {
+            add("managed-runtime javaw", path.join(full, "javaw.exe"), "managed");
+            add("managed-runtime java", path.join(full, "java.exe"), "managed");
+            continue;
+          }
+          stack.push(full);
+        }
+      }
+    };
+
+    await collectManagedJavaBins(this.getAppRuntimeDir());
 
     const javaHome = process.env.JAVA_HOME;
     if (javaHome) {
-      add("JAVA_HOME javaw", path.join(javaHome, "bin", "javaw.exe"));
-      add("JAVA_HOME java", path.join(javaHome, "bin", "java.exe"));
+      add("JAVA_HOME javaw", path.join(javaHome, "bin", "javaw.exe"), "java_home");
+      add("JAVA_HOME java", path.join(javaHome, "bin", "java.exe"), "java_home");
     }
 
     const pf = process.env.ProgramFiles || "C:\\Program Files";
@@ -919,10 +1058,12 @@ class GameLauncherService {
         add(
           `${entry.name} javaw`,
           path.join(root, entry.name, "bin", "javaw.exe"),
+          "system",
         );
         add(
           `${entry.name} java`,
           path.join(root, entry.name, "bin", "java.exe"),
+          "system",
         );
       }
     }
@@ -930,6 +1071,7 @@ class GameLauncherService {
     const available = [];
     for (const cand of candidates)
       if (await fileExists(cand.path)) available.push(cand);
+    available.sort((a, b) => scoreJavaCandidate(b) - scoreJavaCandidate(a));
     return available;
   }
 
@@ -948,15 +1090,22 @@ class GameLauncherService {
       if (!candidates.includes(clean)) candidates.push(clean);
     };
 
-    if (preferredPath) push(preferredPath);
-    const runtimes = await this.detectJavaRuntimes();
     const recommendedMajor = recommendedJavaMajorForVersion(versionId);
+    await this.ensureManagedJavaRuntime(recommendedMajor).catch(() => {});
+    const runtimes = await this.detectJavaRuntimes();
     const matching = runtimes.filter(
       (r) =>
         detectJavaMajorFromPathOrLabel(`${r.label} ${r.path}`) ===
         recommendedMajor,
     );
+    const preferredMajor = detectJavaMajorFromPathOrLabel(preferredPath);
+    const preferredMatches =
+      preferredPath &&
+      (preferredMajor === null || preferredMajor === recommendedMajor);
+
+    if (preferredMatches) push(preferredPath);
     matching.forEach((r) => push(r.path));
+    if (preferredPath && !preferredMatches) push(preferredPath);
     runtimes.forEach((r) => push(r.path));
     push("java");
     return { recommendedMajor, candidates };
@@ -1723,6 +1872,19 @@ class GameLauncherService {
         minecraftDir: runtimeGameDir,
       });
       if (started.ok) {
+        const graceMs = Math.max(8000, this.getRuntimeStallThresholdMs());
+        await new Promise((resolve) => setTimeout(resolve, graceMs));
+        const diedEarly =
+          this.lastGameStatus?.pid === (started.pid || null) &&
+          !this.lastGameStatus?.running;
+        if (diedEarly) {
+          this.lastGameStatus.lastError =
+            this.lastGameStatus.lastError ||
+            `Java process exited during startup grace period (${graceMs}ms).`;
+          this.lastGameStatus.updatedAt = Date.now();
+          continue;
+        }
+
         this.lastGameStatus.javaPathTried = [...tried];
         this.lastGameStatus.javaPathSelected = javaExec;
         this.lastGameStatus.updatedAt = Date.now();
